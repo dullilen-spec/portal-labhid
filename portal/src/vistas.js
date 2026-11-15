@@ -1,3 +1,6 @@
+import { enlaceReporte } from "./config.js";
+import { fechaCorta } from "./datos.js";
+
 const esc = (v) =>
   String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
@@ -27,6 +30,8 @@ export const ICONO = {
   ampliar: trazo('<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/>'),
   atras: trazo('<path d="m15 18-6-6 6-6"/>'),
   tubo: trazo('<path d="M8 3h8M9 3v12a3 3 0 0 0 6 0V3M9 11h6"/>'),
+  campana: trazo('<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/>'),
+  alerta: trazo('<path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/>'),
 };
 
 export const TIPOS = {
@@ -389,6 +394,7 @@ export function vistaFicha(raiz, b, bienes) {
         <p class="modelo">${esc(b.Marca_modelo)}</p>
         <p class="codigo">${esc(b.Codigo_LH)}</p>
         <div class="placa-acciones">${botonManual}${boton3d}</div>
+        ${b._actualizado ? `<p class="ficha-actualizada">Actualizado el ${esc(fechaCorta(b._actualizado))}</p>` : ""}
       </header>
 
       <section class="tarjeta-lugar" aria-label="Ubicación">
@@ -427,9 +433,10 @@ export function vistaFicha(raiz, b, bienes) {
       ${padre.length || comps.length ? bloque("conjunto", "Conjunto", `${relacionados("Pertenece a", padre, porCodigo)}${relacionados("Componentes", comps, porCodigo)}`) : ""}
 
       ${bloque("historial", "Bitácora", b.Historial.length
-        ? `<ul class="hist">${b.Historial.map((h) => `<li><time>${esc(h.fecha)}</time><strong>${esc(h.tipo)}</strong><span>${esc(h.resultado)}</span></li>`).join("")}</ul>`
+        ? `<ul class="hist">${[...b.Historial].reverse().map((h) => `<li><time>${esc(h.fecha)}</time><strong>${esc(h.tipo)}</strong><span>${esc(h.resultado)}</span></li>`).join("")}</ul>`
         : `<p class="nota">Sin intervenciones registradas.</p>`, b.Historial.length > 0)}
       ${pendientes ? `<p class="nota centro">Esta ficha tiene ${pendientes} dato(s) principal(es) por completar.</p>` : ""}
+      <p class="reportar"><a class="boton sec chico" href="${esc(enlaceReporte(b.Codigo_LH, b.Nombre))}" target="_blank" rel="noopener">${ICONO.alerta}Reportar un dato o una falla</a></p>
     </article>`;
   document.title = `${b.Nombre} | Equipos LABHID`;
 }
@@ -446,7 +453,20 @@ export function vistaError(raiz, err) {
     <a class="boton" href="./">Reintentar</a></section>`;
 }
 
-export function vistaAcerca(raiz) {
+// v05: estado del modelo 3D, según modelo/estado_modelo.json (si falta, no se muestra nada)
+function modeloHtml(m) {
+  if (!m) return "";
+  return `<h2>Modelo 3D</h2>
+    <p>${esc(m.descripcion)}</p>
+    <dl>
+      ${fila("Edificio", esc(m.entorno))}
+      ${fila("Equipos", esc(m.equipos))}
+      ${(m.ajuste ?? []).map((a) => fila(a.zona, esc(a.valor))).join("")}
+    </dl>
+    <p class="nota">${esc(m.nota)}</p>`;
+}
+
+export function vistaAcerca(raiz, modelo = null) {
   raiz.innerHTML = `<article class="acerca">
     <h1>Acerca de este portal</h1>
     <p>Reúne la ubicación, el estado y la documentación de los equipos del Laboratorio de Hidráulica de la Universidad Nacional de Trujillo. Cada bien tiene un código QR que abre su ficha.</p>
@@ -460,9 +480,12 @@ export function vistaAcerca(raiz) {
     <dl>
       ${fila("Pendiente", "El dato aún no está verificado. No se completa sin evidencia.")}
       ${fila("Por confirmar en campo", "Viene del censo del pretest y falta contrastarlo con el lugar real.")}
-      ${fila("Modelo de demostración", "La distribución del local es esquemática hasta integrar el modelo levantado con la nube LiDAR.")}
+      ${fila("Actualizado el", "Fecha del último cambio hecho desde el panel de mantenimiento. Los cambios se ven en Novedades.")}
       ${fila("Cuadrícula del visor", "Cada cuadro del piso mide 1 m.")}
     </dl>
+    ${modeloHtml(modelo)}
+    <h2>Algo está mal en una ficha</h2>
+    <p>Usa «Reportar un dato o una falla» al final de la ficha. Un responsable del laboratorio lo revisa y lo corrige; el reporte no cambia la ficha por sí solo.</p>
     <h2>Trabajo de tesis</h2>
     <p>«Gestión de equipos del Laboratorio de Hidráulica mediante Virtual Design and Construction, Universidad Nacional de Trujillo, 2026». Escuela de Ingeniería Civil.</p>
     <p class="nota">El portal no publica datos patrimoniales.</p>
@@ -685,4 +708,49 @@ export async function vistaVisor(raiz, b, bienes, { estaCerrado }) {
       : `<strong>El 3D no está disponible en este dispositivo</strong><span>${lugar}</span>`;
     return null;
   }
+}
+
+// v05: últimos cambios publicados desde el panel de mantenimiento
+const NOMBRE_CAMPO = {
+  Estado_operativo: "Estado operativo",
+  Estado_operativo_fuente: "Fuente del estado",
+  Estado_conservacion: "Estado de conservación",
+  Estado_metrologico: "Estado metrológico",
+  Proxima_fecha: "Próxima calibración o verificación",
+  Ultima_OT: "Última orden de trabajo",
+  Contenedor: "Mueble o zona",
+  Ubicacion_texto: "Ubicación",
+  Ubicacion_estado: "Estado de la ubicación",
+  Foto: "Fotografía",
+  Historial: "Bitácora",
+};
+const valorCambio = (x) =>
+  x.campo === "Historial" ? `${esc(x.valor.tipo)}: ${esc(x.valor.resultado)}` : x.campo === "Foto" ? "Foto nueva" : x.campo === "Ubicacion_texto" ? esc(String(x.valor).split("(")[0].trim()) : esc(x.valor);
+
+export function vistaNovedades(raiz, bienes, cambios) {
+  const porCodigo = new Map(bienes.map((b) => [b.Codigo_LH, b]));
+  const q = new URLSearchParams(location.search).get("id");
+  // La fuente del estado y el texto de ubicación acompañan a otro cambio: no se listan aparte
+  const visibles = cambios
+    .filter((x) => x.campo !== "Estado_operativo_fuente" && x.campo !== "Contenedor")
+    .filter((x) => !q || x.codigo === q)
+    .sort((x, y) => Date.parse(y.fecha) - Date.parse(x.fecha))
+    .slice(0, 150);
+  raiz.innerHTML = `<article class="novedades">
+    <p class="sobretitulo">Laboratorio de Hidráulica, UNT</p>
+    <h1>Novedades</h1>
+    <p>Cambios recientes en el estado, la ubicación y la bitácora de los equipos.${q ? ` Solo de <strong>${esc(q)}</strong>. <a data-interno href="./?ver=novedades">Ver todas</a>` : ""}</p>
+    ${visibles.length
+      ? `<ul class="nov-lista">${visibles
+          .map((x) => {
+            const b = porCodigo.get(x.codigo);
+            return `<li><time datetime="${esc(x.fecha)}">${esc(fechaCorta(x.fecha))}</time>
+              <p><a data-interno href="./?id=${encodeURIComponent(x.codigo)}">${esc(b?.Nombre ?? x.codigo)}</a> <small class="t-codigo">${esc(x.codigo)}</small></p>
+              <p><strong>${esc(NOMBRE_CAMPO[x.campo] ?? x.campo)}:</strong> ${valorCambio(x)}</p>
+              <p class="nota">${esc(x.motivo)} (${esc(x.autor)})</p></li>`;
+          })
+          .join("")}</ul>`
+      : `<section class="aviso-grande">${ICONO.campana}<h2>Todavía no hay novedades</h2><p>Cuando el técnico actualice un equipo, el cambio aparecerá aquí.</p></section>`}
+  </article>`;
+  document.title = "Novedades | Equipos LABHID";
 }

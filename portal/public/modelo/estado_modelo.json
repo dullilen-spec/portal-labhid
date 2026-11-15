@@ -1,0 +1,13 @@
+{
+ "version": "v06 + equipos v09",
+ "descripcion": "El edificio viene del modelo de Revit LabHid_v06_DetallesFamilias, auditado contra la nube de puntos LiDAR del laboratorio (noviembre de 2026). Los equipos ubicados vienen del modelo de prueba v09.",
+ "entorno": "Modelo v06: estructura, muros, muro cortina, carpintería, veredas, volado con lamas, cortasoles y rejas de puertas.",
+ "equipos": "4 equipos ubicados con la nube (HF160, HB016, HB041 y HB015) y la mesada. Los demás bienes se ubican por su mueble o quedan pendientes.",
+ "ajuste": [
+  {"zona": "Veredas y rampas", "valor": "99 a 100 % de la nube a 20 mm o menos"},
+  {"zona": "Muro cortina", "valor": "95 %"},
+  {"zona": "Volado y lamas", "valor": "93 a 95 %"},
+  {"zona": "Cortasoles", "valor": "88 a 98 %"}
+ ],
+ "nota": "Algunos perfiles, espesores y medidas de rejas, cortasoles y volado son supuestos por proporción de fotos y están en la hoja de campo para medirlos en obra."
+}

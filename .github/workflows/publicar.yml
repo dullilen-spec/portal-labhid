@@ -5,6 +5,10 @@ name: Publicar portal
 on:
   push:
     branches: [main]
+    # v05: las mediciones de la hoja de campo no cambian el sitio
+    paths-ignore:
+      - "campo/**"
+      - "*.md"
   workflow_dispatch:
 
 permissions:
@@ -29,15 +33,24 @@ jobs:
       - name: Instalar dependencias
         run: npm ci
         working-directory: portal
+      - name: Revisar las actualizaciones del panel
+        run: node scripts/validar_actualizaciones.mjs
       - name: Construir el sitio
         run: npm run build
         working-directory: portal
       - name: Revisar que no se publiquen datos privados
         run: |
           # Los datos publicados no deben traer columnas de control interno ni patrimoniales
-          if grep -qiE '"(codigo_patrimonial|cod_patrimonial|valor_adquisicion|precio|costo|responsable|dni|resolucion)"[[:space:]]*:' portal/dist/datos/bienes.json; then
-            echo "bienes.json trae una columna privada. No se publica."; exit 1
-          fi
+          for f in portal/dist/datos/bienes.json portal/dist/datos/actualizaciones.json; do
+            [ -f "$f" ] || continue
+            if grep -qiE '"(codigo_patrimonial|cod_patrimonial|valor_adquisicion|precio|costo|responsable|dni|resolucion)"[[:space:]]*:' "$f"; then
+              echo "$f trae una columna privada. No se publica."; exit 1
+            fi
+            # Un número de 12 dígitos seguidos es un código patrimonial
+            if grep -qE '(^|[^0-9])[0-9]{12}([^0-9]|$)' "$f"; then
+              echo "$f trae un número de 12 dígitos, como un código patrimonial. No se publica."; exit 1
+            fi
+          done
           # El modelo 3D no debe llevar parámetros ni códigos internos
           if grep -qa "LH_Codigo" portal/dist/modelo/modelo.frag; then
             echo "modelo.frag trae parámetros del modelo. No se publica."; exit 1

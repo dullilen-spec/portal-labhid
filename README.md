@@ -4,7 +4,15 @@ Portal web para encontrar los equipos del Laboratorio de Hidráulica de la Unive
 
 Forma parte de la tesis «Gestión de equipos del Laboratorio de Hidráulica mediante Virtual Design and Construction, UNT, 2026».
 
-**Estado:** versión beta. Las ubicaciones están por confirmar en campo y el modelo 3D solo tiene algunos equipos ubicados.
+**Estado:** versión beta v05. Las ubicaciones están por confirmar en campo y el modelo 3D solo tiene algunos equipos ubicados.
+
+## Novedades de la v05
+
+- **Panel «Actualizar información»** (`?panel`, sin pestaña en el menú): el técnico y los tesistas cambian el estado, la ubicación, la bitácora y la foto de un equipo. Se guarda en el repositorio con el token de GitHub de cada persona, y el sitio se publica solo. Guía: [`GUIA_ACTUALIZAR_DATOS.md`](GUIA_ACTUALIZAR_DATOS.md).
+- **Novedades:** lista pública de los últimos cambios.
+- **Reportar un dato o una falla:** botón en cada ficha.
+- **Hoja de campo** en el panel: las 55 cotas supuestas del modelo v06, para medirlas en obra, también sin señal.
+- **Modelo 3D:** el edificio es el modelo Revit v06 auditado contra la nube LiDAR; los equipos ubicados siguen siendo los de la v09.
 
 ## Dirección
 
@@ -14,7 +22,7 @@ Ficha de un equipo: `https://dullilen-spec.github.io/portal-labhid/?id=LH-EQP-06
 
 ## Cómo se publica
 
-Cada cambio que llega a la rama `main` se construye y se publica solo con GitHub Actions (`.github/workflows/publicar.yml`). Antes de publicar se revisa que los datos no traigan columnas privadas. Si algo falla, no se publica y queda el sitio anterior.
+Cada cambio que llega a la rama `main` se construye y se publica solo con GitHub Actions (`.github/workflows/publicar.yml`). Antes de publicar se revisa que los cambios del panel cumplan las reglas (`scripts/validar_actualizaciones.mjs`) y que los datos no traigan columnas privadas ni números de 12 dígitos. Si algo falla, no se publica y queda el sitio anterior. Los cambios en `campo/` y en los `.md` no disparan una publicación.
 
 ## Trabajar en una PC
 
@@ -31,10 +39,12 @@ Cada cambio que llega a la rama `main` se construye y se publica solo con GitHub
 | Carpeta | Contenido |
 |---|---|
 | `portal/src` | Código del sitio: `main.js`, `vistas.js`, `visor.js` y estilos |
-| `portal/public/datos` | `bienes.json`: solo los datos publicables de cada equipo |
+| `portal/public/datos` | `bienes.json`: datos publicables del Excel maestro. `actualizaciones.json`: cambios hechos desde el panel, que se aplican encima |
 | `portal/public/modelo` | Modelo 3D (`modelo.frag`) e índice que une cada equipo con su elemento del modelo |
 | `portal/public/fotos` | Fotos de los equipos |
-| `scripts` | Servidores locales, prueba de navegador y capturas |
+| `portal/src/panel.js`, `esquema.js`, `datos.js`, `config.js` | Panel de mantenimiento, reglas de validación, carga de datos y configuración (v05) |
+| `campo` | Hoja de campo del modelo v06 y mediciones registradas desde el panel. No se publica en el sitio |
+| `scripts` | Servidores locales, pruebas de navegador (`prueba_navegador.mjs`, `prueba_v05.mjs`), validación de actualizaciones, sincronización con el Excel e integración del modelo (`ifc_indice.mjs`, `ifc_a_frag.mjs`) |
 
 ## Lo que no se sube
 

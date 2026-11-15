@@ -1,0 +1,40 @@
+name: Reportar un dato o una falla
+description: Avisa que un dato de una ficha está mal o que un equipo tiene una falla. Lo revisa un responsable del laboratorio.
+title: "[LH-] "
+labels: ["reporte"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Gracias por avisar. No escribas datos personales ni códigos patrimoniales: este reporte es público.
+  - type: input
+    id: codigo
+    attributes:
+      label: Código del equipo
+      description: Está en la etiqueta QR y en la ficha, por ejemplo LH-EQP-065.
+      placeholder: LH-EQP-065
+    validations:
+      required: true
+  - type: input
+    id: bien
+    attributes:
+      label: Nombre del equipo
+  - type: dropdown
+    id: que
+    attributes:
+      label: Qué pasa
+      options:
+        - Un dato de la ficha está mal
+        - El equipo no está donde dice
+        - El equipo tiene una falla
+        - Falta un manual o una foto
+        - Otro
+    validations:
+      required: true
+  - type: textarea
+    id: detalle
+    attributes:
+      label: Detalle
+      description: Qué está mal y cuál sería el dato correcto. Puedes adjuntar una foto.
+    validations:
+      required: true

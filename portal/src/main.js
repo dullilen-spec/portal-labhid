@@ -3,7 +3,8 @@ import "@fontsource/saira/400.css";
 import "@fontsource/saira/500.css";
 import "@fontsource/saira-condensed/600.css";
 import "@fontsource/saira-condensed/700.css";
-import { ICONO, inicioDividido, vistaAcerca, vistaError, vistaFicha, vistaInicio, vistaNoEncontrado, vistaVisor } from "./vistas.js";
+import { cargarDatos } from "./datos.js";
+import { ICONO, inicioDividido, vistaAcerca, vistaError, vistaFicha, vistaInicio, vistaNoEncontrado, vistaNovedades, vistaVisor } from "./vistas.js";
 
 const raiz = document.getElementById("app");
 const navegacion = document.getElementById("nav");
@@ -17,18 +18,27 @@ buscarBarra?.addEventListener("submit", (e) => {
   navegar(`./?q=${encodeURIComponent(t)}`);
 });
 let bienes = [];
+let cambios = [];
+let estadoModelo;
 let cerrarVisor = null;
 let generacion = 0;
 
 navegacion.innerHTML = `
   <a data-interno data-seccion="buscar" href="./">${ICONO.buscar}<span>Buscar</span></a>
   <a data-interno data-seccion="mapa" href="./?ver=mapa">${ICONO.cubo}<span>Mapa 3D</span></a>
+  <a data-interno data-seccion="novedades" href="./?ver=novedades">${ICONO.campana}<span>Novedades</span></a>
   <a data-interno data-seccion="acerca" href="./?ver=acerca">${ICONO.info}<span>Acerca</span></a>`;
 
-async function cargarDatos() {
-  const r = await fetch("./datos/bienes.json", { cache: "no-cache" });
-  if (!r.ok) throw new Error(`No se pudo leer los datos (${r.status})`);
-  return (await r.json()).bienes;
+// v05: estado del modelo 3D para «Acerca»; si falta, la sección no se muestra
+async function leerEstadoModelo() {
+  if (estadoModelo !== undefined) return estadoModelo;
+  try {
+    const r = await fetch("./modelo/estado_modelo.json", { cache: "no-cache" });
+    estadoModelo = r.ok ? await r.json() : null;
+  } catch {
+    estadoModelo = null;
+  }
+  return estadoModelo;
 }
 
 // v03, animaciones (12/11/2026): una sola marca bajo la pestaña activa que se desliza entre pestañas
@@ -88,6 +98,23 @@ async function pintar() {
   const q = new URLSearchParams(location.search);
   const id = q.get("id");
   const ver = q.get("ver");
+  // v05: panel de mantenimiento, sin pestaña en el menú
+  if (q.has("panel")) {
+    raiz.classList.remove("ancha", "dividida");
+    marcar("", false);
+    animarEntrada("otra");
+    raiz.innerHTML = `<p class="cargando">Cargando el panel...</p>`;
+    const { vistaPanel } = await import("./panel.js");
+    if (propia === generacion) vistaPanel(raiz, { bienes, cambios });
+    return;
+  }
+  if (ver === "novedades") {
+    raiz.classList.remove("ancha", "dividida");
+    window.scrollTo(0, 0);
+    marcar("novedades", false);
+    animarEntrada("otra");
+    return vistaNovedades(raiz, bienes, cambios);
+  }
   const bien = id && bienes.find((b) => b.Codigo_LH.toLowerCase() === id.trim().toLowerCase());
   // En computadora, si la lista ya está en pantalla, solo cambia la ficha del panel: la lista conserva su lugar
   const panel = ESCRITORIO.matches && !ver && !q.has("q") && (!id || bien) ? inicioDividido(raiz) : null;
@@ -128,7 +155,9 @@ async function pintar() {
   }
   if (ver === "acerca") {
     marcar("acerca", false);
-    return vistaAcerca(raiz);
+    const m = await leerEstadoModelo();
+    if (propia === generacion) vistaAcerca(raiz, m);
+    return;
   }
   marcar("buscar", false);
   vistaInicio(raiz, bienes, navegar);
@@ -149,7 +178,7 @@ document.addEventListener("click", (e) => {
 window.addEventListener("popstate", pintar);
 
 try {
-  bienes = await cargarDatos();
+  ({ bienes, cambios } = await cargarDatos());
   await pintar();
 } catch (err) {
   vistaError(raiz, err);

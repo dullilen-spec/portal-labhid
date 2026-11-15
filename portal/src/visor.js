@@ -260,7 +260,9 @@ export async function abrirVisor(caja, bien, bienesPorCodigo, cb) {
   if (idsOcultar.length) await modelo.setVisible(idsOcultar, false);
   const idsEntorno = await ids(indice.entorno ?? []);
   const visibles = await ids([...inversos.bien.keys(), ...inversos.contenedor.keys(), ...(indice.entorno ?? []), ...(indice.piso ?? []), ...(indice.otros ?? [])]);
-  const cajaTotal = await modelo.getMergedBox(visibles);
+  // v05: con el modelo v06 (veredas y volado) el encuadre se hace con el edificio; si el índice no lo trae, con todo
+  const idsEncuadre = indice.encuadre?.length ? await ids(indice.encuadre) : [];
+  const cajaTotal = await modelo.getMergedBox(idsEncuadre.length ? idsEncuadre : visibles);
   const centroTotal = cajaTotal.getCenter(new THREE.Vector3());
   const diagonal = cajaTotal.getSize(new THREE.Vector3()).length();
   controles.maxDistance = diagonal * 2.2;

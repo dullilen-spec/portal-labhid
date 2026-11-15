@@ -15,6 +15,7 @@ fs.mkdirSync(CAPTURAS, { recursive: true });
 const bienes = JSON.parse(fs.readFileSync(path.join(RAIZ, "portal", "public", "datos", "bienes.json"), "utf8")).bienes;
 const indice = JSON.parse(fs.readFileSync(path.join(RAIZ, "portal", "public", "modelo", "indice_modelo.json"), "utf8"));
 const muestra = bienes.filter((b) => b.En_muestra === "Sí");
+const MANUALES_PUBLICADOS = /MANUALES_PUBLICADOS = true/.test(fs.readFileSync(path.join(RAIZ, "portal", "src", "config.js"), "utf8"));
 // v02: lugar de HB015 según los datos publicados (antes, «Armario 1»)
 const lugarHB015 = bienes.find((b) => b.Codigo_LH === "LH-EQP-065").Ubicacion_texto.split("(")[0].split(" - ").pop().trim();
 
@@ -145,10 +146,17 @@ try {
   await captura("3_ficha_detalle.png");
   await ir(`${BASE}?id=NO-EXISTE`, 400);
   caso("Código inexistente muestra aviso", (await evalua("document.body.innerText")).includes("No encontramos ese código"));
+  // v05: los manuales de fábrica no se publican todavía (MANUALES_PUBLICADOS en portal/src/config.js)
   const manual = bienes.find((b) => b.Manual_fabrica_URL);
-  const rm = await fetch(BASE + manual.Manual_fabrica_URL, { method: "HEAD" });
-  caso("Manual de fábrica disponible", rm.ok && (rm.headers.get("content-type") ?? "").includes("pdf"), manual.Manual_fabrica_URL);
-  caso("Todos los enlaces de manual y foto existen", (await Promise.all(bienes.flatMap((b) => [b.Foto, b.Manual_fabrica_URL]).filter(Boolean).map((u) => fetch(BASE + u, { method: "HEAD" }).then((r) => r.ok)))).every(Boolean));
+  if (MANUALES_PUBLICADOS) {
+    const rm = await fetch(BASE + manual.Manual_fabrica_URL, { method: "HEAD" });
+    caso("Manual de fábrica disponible", rm.ok && (rm.headers.get("content-type") ?? "").includes("pdf"), manual.Manual_fabrica_URL);
+  } else {
+    await ir(`${BASE}?id=${manual.Codigo_LH}`, 500);
+    await hasta(`document.querySelector('.codigo')?.textContent === ${JSON.stringify(manual.Codigo_LH)}`);
+    caso("Sin manuales publicados, la ficha no enlaza un PDF inexistente", await evalua("!document.querySelector('.docs a[href*=manuales]') && !document.querySelector('.placa-acciones a[href*=manuales]') && document.querySelector('.docs').innerText.includes('Solicítalo al técnico')"), manual.Codigo_LH);
+  }
+  caso("Todos los enlaces de manual y foto existen", (await Promise.all(bienes.flatMap((b) => [b.Foto, MANUALES_PUBLICADOS || b.Manual_fabrica_URL?.startsWith("https://") ? b.Manual_fabrica_URL : ""]).filter(Boolean).map((u) => fetch(BASE + u, { method: "HEAD" }).then((r) => r.ok)))).every(Boolean));
 
   // Visor: todos los bienes llegan a su objetivo y este queda en el encuadre
   fallas = [];
@@ -192,7 +200,7 @@ try {
   await cdp("Input.dispatchMouseEvent", { type: "mousePressed", x: pc.x, y: pc.y, button: "left", clickCount: 1 });
   await cdp("Input.dispatchMouseEvent", { type: "mouseReleased", x: pc.x, y: pc.y, button: "left", clickCount: 1 });
   caso("Tocar el equipo lo identifica", await hasta("window.__visor.seleccion()?.codigo === 'LH-EQP-065'", 4000));
-  caso("La hoja muestra el bien, su estado y su ficha", await evalua("(() => { const t = document.querySelector('#visor-hoja').innerText; return t.includes('Bernoulli') && t.includes('Operativo') && t.includes('Ver ficha') && t.includes('Manual'); })()"));
+  caso("La hoja muestra el bien, su estado y su ficha", await evalua(`(() => { const t = document.querySelector('#visor-hoja').innerText; return t.includes('Bernoulli') && t.includes('Operativo') && t.includes('Ver ficha') && (${!MANUALES_PUBLICADOS} || t.includes('Manual')); })()`));
   await captura("5_visor_seleccion.png");
   // Lista de lo que hay en el mueble, desde la hoja del bien
   await evalua(`document.querySelector('[data-hoja="mueble"]').click()`);
