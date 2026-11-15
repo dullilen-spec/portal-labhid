@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="es-PE">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#232A33" />
+    <title>Equipos LABHID</title>
+    <meta name="description" content="Ubicación, estado y documentación de los equipos del Laboratorio de Hidráulica, Universidad Nacional de Trujillo." />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icono.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icono-192.png" />
+    <link rel="stylesheet" href="/src/estilos.css" />
+    <link rel="stylesheet" href="/src/tema.css" />
+  </head>
+  <body>
+    <header class="barra-sup">
+      <a class="marca" data-interno href="./"><i>LH</i>Equipos LABHID</a>
+      <span class="etiqueta-prueba" title="Versión de prueba de la tesis. Ubicaciones por confirmar en campo.">Prueba</span>
+      <span class="sub">Laboratorio de Hidráulica, UNT</span>
+      <form class="buscar-barra" id="buscar-barra" role="search">
+        <label class="solo-lector" for="q-barra">Buscar un equipo</label>
+        <input id="q-barra" type="search" autocomplete="off" enterkeyhint="search" placeholder="Buscar un equipo" />
+      </form>
+    </header>
+    <div class="aviso" role="note">Versión de prueba de la tesis. Ubicaciones por confirmar en campo.</div>
+    <main id="app" tabindex="-1"><p class="cargando">Cargando...</p></main>
+    <nav id="nav" class="nav" aria-label="Principal"></nav>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,57 @@
+# Publica el portal en GitHub Pages cada vez que se sube un cambio a la rama main.
+# Si la construcción falla, no se publica nada y queda el sitio anterior.
+name: Publicar portal
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  construir:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: portal/package-lock.json
+      - name: Instalar dependencias
+        run: npm ci
+        working-directory: portal
+      - name: Construir el sitio
+        run: npm run build
+        working-directory: portal
+      - name: Revisar que no se publiquen datos privados
+        run: |
+          # Los datos publicados no deben traer columnas de control interno ni patrimoniales
+          if grep -qiE '"(codigo_patrimonial|cod_patrimonial|valor_adquisicion|precio|costo|responsable|dni|resolucion)"[[:space:]]*:' portal/dist/datos/bienes.json; then
+            echo "bienes.json trae una columna privada. No se publica."; exit 1
+          fi
+          # El modelo 3D no debe llevar parámetros ni códigos internos
+          if grep -qa "LH_Codigo" portal/dist/modelo/modelo.frag; then
+            echo "modelo.frag trae parámetros del modelo. No se publica."; exit 1
+          fi
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: portal/dist
+
+  publicar:
+    needs: construir
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.despliegue.outputs.page_url }}
+    steps:
+      - id: despliegue
+        uses: actions/deploy-pages@v4
