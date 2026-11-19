@@ -1743,54 +1743,6 @@ button.cara:focus-visible {
 .cara.arriba { transform: rotateX(90deg) translateZ(20px); background: rgb(230 238 251 / 94%); }
 .cara.abajo { transform: rotateX(-90deg) translateZ(20px); background: #d6d9d4; }
 
-/* Menú de vistas: sale junto al botón «Vistas» de la barra */
-.visor-vistas {
-  position: absolute;
-  z-index: 7;
-  display: grid;
-  gap: 2px;
-  width: 232px;
-  padding: 6px;
-  border-radius: 12px;
-  background: rgb(243 242 238 / 80%);
-  -webkit-backdrop-filter: blur(18px) saturate(160%);
-  backdrop-filter: blur(18px) saturate(160%);
-  border: 1px solid rgb(255 255 255 / 60%);
-  box-shadow: 0 10px 28px rgb(32 37 43 / 22%), inset 0 1px 0 rgb(255 255 255 / 75%);
-  animation: entra-abajo 0.2s var(--curva);
-}
-.visor-vistas[hidden] {
-  display: none;
-}
-.visor-vistas button {
-  display: grid;
-  gap: 1px;
-  text-align: left;
-  padding: 7px 10px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--grafito);
-  cursor: pointer;
-}
-.visor-vistas button:hover,
-.visor-vistas button:focus-visible {
-  background: var(--azul-claro);
-  outline: none;
-}
-.visor-vistas strong {
-  font: 600 0.9rem/1.1 var(--t-titulo);
-  letter-spacing: 0.02em;
-}
-.visor-vistas small {
-  font-size: 0.72rem;
-  color: var(--pizarra);
-}
-body.vidrio-solido .visor-vistas {
-  background: var(--blanco);
-  backdrop-filter: none;
-}
-
 /* Flechas para pasar de un equipo a otro en la hoja */
 .hoja-nav {
   display: flex;
@@ -1844,4 +1796,310 @@ body.vidrio-solido .visor-vistas {
   .cara.izq { transform: rotateY(-90deg) translateZ(23px); }
   .cara.arriba { transform: rotateX(90deg) translateZ(23px); }
   .cara.abajo { transform: rotateX(-90deg) translateZ(23px); }
+}
+
+/* =====================================================================
+   Correcciones del 14/11/2026
+   ===================================================================== */
+
+/* n.° 3 y 4: menús chicos pegados a su botón («Vista» y «Corte»), sin tapar el modelo */
+.visor-menu {
+  position: absolute;
+  z-index: 7;
+  display: grid;
+  gap: 4px;
+  padding: 5px;
+  border-radius: 10px;
+  background: rgb(243 242 238 / 82%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  backdrop-filter: blur(18px) saturate(160%);
+  border: 1px solid rgb(255 255 255 / 60%);
+  box-shadow: 0 8px 22px rgb(32 37 43 / 20%), inset 0 1px 0 rgb(255 255 255 / 75%);
+  animation: entra-abajo 0.16s var(--curva);
+}
+.visor-menu[hidden] {
+  display: none;
+}
+.visor-menu button {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid rgb(255 255 255 / 80%);
+  border-radius: 7px;
+  background: var(--blanco);
+  color: var(--grafito);
+  font: 600 0.84rem/1 var(--t-titulo);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.visor-menu button:hover,
+.visor-menu button:focus-visible {
+  background: var(--azul-claro);
+  color: var(--azul);
+  outline: none;
+}
+.visor-menu-corte {
+  width: 206px;
+}
+.visor-menu-corte button {
+  text-transform: none;
+  letter-spacing: 0.01em;
+}
+.visor-menu-corte [data-corte="aplicar"] {
+  background: var(--azul);
+  border-color: var(--azul);
+  color: #fff;
+}
+.visor-menu-corte [data-corte="aplicar"]:hover {
+  background: #1d48a8;
+  color: #fff;
+}
+.menu-estado {
+  margin: 2px 4px 0;
+  font-size: 0.74rem;
+  color: var(--pizarra);
+}
+.corte-altura {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  font-size: 0.84rem;
+  color: var(--grafito);
+}
+.corte-altura input {
+  width: 72px;
+  min-height: 34px;
+  padding: 0 8px;
+  border: 1px solid var(--pizarra);
+  border-radius: 6px;
+  background: #fff;
+  font: 500 0.95rem var(--t-texto);
+}
+body.vidrio-solido .visor-menu {
+  background: var(--blanco);
+  backdrop-filter: none;
+}
+
+/* n.° 5: interruptor de la estructura (transparente / con sus colores) */
+.visor-interruptor {
+  position: absolute;
+  z-index: 3;
+  top: 166px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 150px;
+  padding: 7px 10px;
+  border: 1px solid rgb(255 255 255 / 60%);
+  border-radius: 10px;
+  background: rgb(243 242 238 / 70%);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  color: var(--grafito);
+  font: 500 0.74rem/1.15 var(--t-texto);
+  text-align: left;
+  cursor: pointer;
+}
+.visor.sin-3d .visor-interruptor {
+  display: none;
+}
+.visor-interruptor .pista {
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 20px;
+  border-radius: 10px;
+  background: #b9bfba;
+  transition: background 0.2s var(--curva);
+}
+.visor-interruptor .pista i {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 30%);
+  transition: transform 0.2s var(--curva);
+}
+.visor-interruptor[aria-checked="true"] .pista {
+  background: var(--azul);
+}
+.visor-interruptor[aria-checked="true"] .pista i {
+  transform: translateX(14px);
+}
+.visor-interruptor:focus-visible {
+  outline: 2px solid var(--azul);
+  outline-offset: 2px;
+}
+@media (min-width: 900px) {
+  /* A la derecha, justo encima del cubo: a media altura tapaba los equipos del modelo */
+  .visor-interruptor {
+    top: auto;
+    bottom: 120px;
+    right: 18px;
+    max-width: 170px;
+  }
+}
+
+/* n.° 6: resultados del buscador de la barra superior */
+.buscar-barra {
+  position: relative;
+}
+.barra-resultados {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  width: 340px;
+  max-height: 60vh;
+  overflow-y: auto;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  border-radius: 10px;
+  background: var(--blanco);
+  border: 1px solid var(--gris);
+  box-shadow: 0 12px 28px rgb(32 37 43 / 25%);
+}
+.barra-resultados[hidden] {
+  display: none;
+}
+.barra-resultados a {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  color: var(--grafito);
+  text-decoration: none;
+}
+.barra-resultados a:hover,
+.barra-resultados a:focus-visible {
+  background: var(--azul-claro);
+  outline: none;
+}
+.barra-resultados strong {
+  font: 600 0.95rem/1.2 var(--t-titulo);
+}
+.barra-resultados small {
+  font-size: 0.78rem;
+  color: var(--pizarra);
+}
+.barra-resultados .sin-resultado {
+  padding: 10px;
+  color: var(--pizarra);
+  font-size: 0.86rem;
+}
+
+/* n.° 8: foto y modelo 3D del equipo, lado a lado */
+.heroe.con-3d {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.heroe.con-3d > img,
+.heroe.con-3d > span {
+  min-width: 0;
+}
+.heroe-3d {
+  position: relative;
+  min-width: 0;
+  height: 100%;
+  border-left: 1px solid rgb(255 255 255 / 12%);
+  background: radial-gradient(circle at 50% 40%, #39424c, var(--grafito) 75%);
+  overflow: hidden;
+}
+.heroe-3d[hidden] {
+  display: none;
+}
+.heroe-3d canvas {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  touch-action: none;
+  cursor: grab;
+}
+.heroe-3d-aviso,
+.heroe-3d-ayuda {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  color: #d7dbe0;
+  font-size: 0.72rem;
+  text-align: center;
+  pointer-events: none;
+}
+.heroe-3d-aviso {
+  top: 50%;
+  bottom: auto;
+  transform: translateY(-50%);
+}
+.heroe-3d-boton {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font: 600 0.95rem/1.2 var(--t-titulo);
+  cursor: pointer;
+}
+.heroe-3d-boton .ic {
+  width: 34px;
+  height: 34px;
+  color: var(--azul-tubo, #8fb3ff);
+}
+.heroe-3d-boton small {
+  font: 400 0.74rem var(--t-texto);
+  color: #c9ced4;
+}
+
+/* n.° 9: placa «Inspection Tag» */
+.placa-acciones .boton:nth-child(3) {
+  grid-column: 1 / -1;
+}
+.tag-dialogo {
+  max-width: min(92vw, 900px);
+  padding: 12px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--blanco);
+}
+.tag-dialogo::backdrop {
+  background: rgb(20 24 28 / 70%);
+}
+.tag-dialogo img {
+  display: block;
+  max-width: 100%;
+  max-height: 72vh;
+  margin: 0 auto;
+  border-radius: 6px;
+}
+.tag-dialogo figcaption {
+  margin-top: 8px;
+  font-size: 0.82rem;
+  color: var(--pizarra);
+  text-align: center;
+}
+.tag-acciones {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/* n.° 7: con «Mobiliario» los filtros no entran en una fila en escritorio: pasan a dos filas en vez de cortarse */
+@media (min-width: 1000px) {
+  .ancha .filtros {
+    flex-wrap: wrap;
+    overflow: visible;
+  }
 }

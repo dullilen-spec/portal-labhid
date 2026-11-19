@@ -13,6 +13,8 @@ const RESALTE = {
   preserveOriginalMaterial: false,
 };
 const OPACIDAD = { muros: 0.08, resto: 0.2, contenedor: 0.28 };
+// Correcciones del 14/11/2026 (n.° 4): altura de corte por defecto sobre el piso
+export const ALTURA_CORTE = 2.2;
 const MS_RESALTE = 2200;
 const EN_PRUEBA = new URLSearchParams(location.search).has("prueba");
 const SIN_MOVIMIENTO = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -79,6 +81,8 @@ export function resolverObjetivo(ind, bien, bienesPorCodigo) {
 
 export async function abrirVisor(caja, bien, bienesPorCodigo, cb) {
   const t0 = performance.now();
+  // El 3D chico de una ficha suelta el renderizador
+  miniCerrar?.();
   await preparar(cb.alProgreso);
   if (cb.cerrado?.()) return () => {};
 
@@ -212,28 +216,56 @@ export async function abrirVisor(caja, bien, bienesPorCodigo, cb) {
     }
   };
 
-  // v05b: menú «Vistas» de la barra. Va fuera de la barra porque ella tiene desplazamiento propio y lo recortaría
-  const menu = caja.querySelector(".visor-vistas");
+  // Menús de la barra (correcciones del 14/11, n.° 3 y 4): «Vista» y «Corte» se abren al pasar el mouse
+  // (o al tocar, en celular) y salen pegados al botón, chicos, para no tapar el modelo.
+  // Van fuera de la barra porque ella tiene desplazamiento propio y los recortaría
+  const menus = { vista: caja.querySelector(".visor-menu-vista"), corte: caja.querySelector(".visor-menu-corte") };
+  let menuAbierto = null;
+  let cierreMenu = 0;
+  const botonDe = (k) => caja.querySelector(`[data-menu="${k}"]`);
   const cerrarMenu = () => {
-    if (!menu || menu.hidden) return;
-    menu.hidden = true;
-    caja.querySelector('[data-accion="vistas"]')?.setAttribute("aria-expanded", "false");
+    clearTimeout(cierreMenu);
+    if (!menuAbierto) return;
+    menus[menuAbierto].hidden = true;
+    botonDe(menuAbierto)?.setAttribute("aria-expanded", "false");
+    menuAbierto = null;
   };
-  const alternarMenu = (boton) => {
-    if (!menu) return;
-    if (!menu.hidden) return cerrarMenu();
+  const abrirMenu = (k, enfocar = false) => {
+    clearTimeout(cierreMenu);
+    const menu = menus[k];
+    const boton = botonDe(k);
+    if (!menu || !boton) return;
+    if (menuAbierto && menuAbierto !== k) cerrarMenu();
+    menuAbierto = k;
     menu.hidden = false;
-    boton?.setAttribute("aria-expanded", "true");
+    boton.setAttribute("aria-expanded", "true");
     const rc = caja.getBoundingClientRect();
-    const rb = (boton ?? caja).getBoundingClientRect();
+    const rb = boton.getBoundingClientRect();
     const vertical = rb.left - rc.left > rc.width * 0.6;
-    // Barra vertical a la derecha: el menú se abre a su izquierda. Barra horizontal abajo: se abre encima
-    menu.style.left = vertical ? "auto" : `${Math.max(8, Math.min(rb.left - rc.left, rc.width - menu.offsetWidth - 8))}px`;
-    menu.style.right = vertical ? `${rc.right - rb.left + 8}px` : "auto";
-    menu.style.top = vertical ? `${Math.max(8, Math.min(rb.top - rc.top, rc.height - menu.offsetHeight - 8))}px` : "auto";
-    menu.style.bottom = vertical ? "auto" : `${rc.bottom - rb.top + 8}px`;
-    menu.querySelector("button")?.focus({ preventScroll: true });
+    // Barra vertical a la derecha: el menú sale a su izquierda. Barra horizontal abajo: sale encima del botón
+    menu.style.left = vertical ? "auto" : `${Math.max(8, Math.min(rb.left - rc.left + rb.width / 2 - menu.offsetWidth / 2, rc.width - menu.offsetWidth - 8))}px`;
+    menu.style.right = vertical ? `${rc.right - rb.left + 6}px` : "auto";
+    menu.style.top = vertical ? `${Math.max(8, Math.min(rb.top - rc.top + rb.height / 2 - menu.offsetHeight / 2, rc.height - menu.offsetHeight - 8))}px` : "auto";
+    menu.style.bottom = vertical ? "auto" : `${rc.bottom - rb.top + 6}px`;
+    if (enfocar) menu.querySelector("button, input")?.focus({ preventScroll: true });
   };
+  const cerrarLuego = () => {
+    clearTimeout(cierreMenu);
+    cierreMenu = setTimeout(cerrarMenu, 280);
+  };
+  const conMouse = matchMedia("(hover: hover) and (pointer: fine)").matches;
+  const alEntrar = (e) => {
+    if (!conMouse) return;
+    const b = e.target.closest?.("[data-menu]");
+    if (b) abrirMenu(b.dataset.menu);
+    else if (e.target.closest?.(".visor-menu")) clearTimeout(cierreMenu);
+  };
+  const alSalir = (e) => {
+    if (!conMouse) return;
+    if (e.target.closest?.("[data-menu], .visor-menu") && !e.relatedTarget?.closest?.("[data-menu], .visor-menu")) cerrarLuego();
+  };
+  caja.addEventListener("mouseover", alEntrar);
+  caja.addEventListener("mouseout", alSalir);
 
   const dibujar = () => {
     controles.update();
@@ -322,11 +354,13 @@ export async function abrirVisor(caja, bien, bienesPorCodigo, cb) {
   renderer.clippingPlanes = [];
   let cortado = false;
   let planoCorte = null;
+  let yPiso = cajaTotal.min.y;
   if (indice.corte) {
     const idsPiso = await ids(indice.corte.piso_base ?? []);
-    const yPiso = idsPiso.length ? (await modelo.getMergedBox(idsPiso)).max.y : cajaTotal.min.y;
-    planoCorte = new THREE.Plane(new THREE.Vector3(0, -1, 0), yPiso + (indice.corte.altura_m ?? 1.8));
+    if (idsPiso.length) yPiso = (await modelo.getMergedBox(idsPiso)).max.y;
+    planoCorte = new THREE.Plane(new THREE.Vector3(0, -1, 0), yPiso + ALTURA_CORTE);
   }
+  let estructuraColor = false;
 
   const lado = Math.max(4, Math.ceil(diagonal * 1.6));
   const suelo = new THREE.GridHelper(lado, lado, 0x9aa5b1, 0xd5dae0);
@@ -498,9 +532,17 @@ export async function abrirVisor(caja, bien, bienesPorCodigo, cb) {
   const guidsBienes = Object.values(indice.bienes).flat();
   const cajaBienes = guidsBienes.length ? await modelo.getMergedBox(await ids(guidsBienes)) : null;
   const haciaDentro = cajaBienes ? edificio.centro.clone().sub(cajaBienes.getCenter(new THREE.Vector3())).setY(0) : null;
-  const dirGeneral = haciaDentro && haciaDentro.length() > 0.5 && !indice.simulado
-    ? haciaDentro.normalize().multiplyScalar(0.78).add(new THREE.Vector3(0, 1.05, 0))
-    : new THREE.Vector3(0.3, 1.05, 0.72);
+  // Correcciones del 14/11 (n.° 2): «General» y «Ver mapa 3D» abren un isométrico cercano desde afuera, desde la esquina
+  // del edificio que mira hacia los equipos (el techo va oculto, así se ve el interior)
+  const dirGeneral = (() => {
+    const ref = haciaDentro && haciaDentro.length() > 0.5 && !indice.simulado ? haciaDentro.clone().normalize() : edificio.frente.clone().add(edificio.derecha);
+    let mejor = null;
+    for (const sa of [-1, 1]) for (const sb of [-1, 1]) {
+      const h = edificio.frente.clone().multiplyScalar(sa).add(edificio.derecha.clone().multiplyScalar(sb)).normalize();
+      if (!mejor || h.dot(ref) > mejor.dot(ref)) mejor = h;
+    }
+    return mejor.setY(0.72);
+  })();
   const vistaGeneral = (dur) => volarEdificio(dirGeneral, dur);
 
   // v05b: vistas del edificio (pedido de Diego del 15/11): frontal, posterior, laterales, isométrico y planta
@@ -557,11 +599,16 @@ export async function abrirVisor(caja, bien, bienesPorCodigo, cb) {
   const aplicarAtenuado = async () => {
     if (objetivo.tipo === "mapa" || objetivo.tipo === "ninguno") {
       await modelo.resetOpacity(visibles);
-      await atenuarMuros(indice.simulado ? 0.28 : 0.18);
+      if (estructuraColor) await modelo.resetHighlight(idsEntorno);
+      else await atenuarMuros(indice.simulado ? 0.28 : 0.18);
       return;
     }
     await modelo.setOpacity(visibles, OPACIDAD.resto);
-    await atenuarMuros(OPACIDAD.muros);
+    if (estructuraColor) {
+      // La estructura con sus materiales; el equipo buscado sigue marcado y lo demás, atenuado
+      await modelo.resetHighlight(idsEntorno);
+      await modelo.resetOpacity(idsEntorno);
+    } else await atenuarMuros(OPACIDAD.muros);
     if (idsCont.length) await modelo.setOpacity(idsCont, OPACIDAD.contenedor);
     await modelo.resetOpacity(idsFoco);
   };
@@ -722,6 +769,36 @@ export async function abrirVisor(caja, bien, bienesPorCodigo, cb) {
     avisar();
   }
 
+  // Corte a una altura sobre el piso (null lo quita). Correcciones del 14/11 (n.° 4)
+  const fijarCorte = async (h) => {
+    if (!planoCorte) return;
+    cortado = h != null;
+    if (cortado) planoCorte.constant = yPiso + h;
+    renderer.clippingPlanes = cortado ? [planoCorte] : [];
+    botonDe("corte")?.setAttribute("aria-pressed", String(cortado));
+    const quitar = menus.corte?.querySelector('[data-corte="quitar"]');
+    if (quitar) quitar.hidden = !cortado;
+    const estado = menus.corte?.querySelector(".menu-estado");
+    if (estado) estado.textContent = cortado ? `Cortado a ${h.toLocaleString("es-PE")} m del piso` : "Sin corte";
+    // Al cortar, la cámara baja para ver lo que queda sobre las mesadas; sin corte, vuelve a la vista de siempre
+    if (!aislado) {
+      if (cajaFoco) irAlFoco(0.8);
+      else if (cortado) {
+        // Se encuadran los equipos y muebles con código, mirando desde el centro del local
+        const b = (cajaBienes ?? cajaTotal).clone();
+        for (const gs of Object.values(indice.contenedores)) {
+          if (gs.length) b.union(await modelo.getMergedBox(await ids(gs)));
+        }
+        b.expandByScalar(0.6);
+        b.max.y = Math.min(b.max.y, planoCorte.constant);
+        const dir = dirGeneral.clone().setY(0).normalize().multiplyScalar(0.85).add(new THREE.Vector3(0, 0.8, 0));
+        volarA(b.getCenter(new THREE.Vector3()), esquinas(b), dir, 0.8);
+      } else vistaGeneral(0.8);
+    }
+    await motor.update(true);
+    avisar(1200);
+  };
+
   // Controles en pantalla
   const acciones = {
     foco: () => irAlFoco(0.9),
@@ -734,7 +811,6 @@ export async function abrirVisor(caja, bien, bienesPorCodigo, cb) {
       if (cajaFoco) volar(c, Math.max(distanciaPara(contexto) * 1.6, 5), arriba, 0.9);
       else volarEdificio(arriba, 0.9);
     },
-    vistas: (boton) => alternarMenu(boton),
     vista: (nombre) => {
       tocado = true;
       cerrarMenu();
@@ -750,28 +826,15 @@ export async function abrirVisor(caja, bien, bienesPorCodigo, cb) {
       await motor.update(true);
       avisar();
     },
-    corte: async (boton) => {
-      if (!planoCorte) return;
-      cortado = !cortado;
-      renderer.clippingPlanes = cortado ? [planoCorte] : [];
-      boton?.setAttribute("aria-pressed", String(cortado));
-      // Al cortar, la cámara baja para ver lo que queda sobre las mesadas; sin corte, vuelve a la vista de siempre
-      if (!aislado) {
-        if (cajaFoco) irAlFoco(0.8);
-        else if (cortado) {
-          // Se encuadran los equipos y muebles con código, mirando desde el centro del local
-          const b = (cajaBienes ?? cajaTotal).clone();
-          for (const gs of Object.values(indice.contenedores)) {
-            if (gs.length) b.union(await modelo.getMergedBox(await ids(gs)));
-          }
-          b.expandByScalar(0.6);
-          b.max.y = Math.min(b.max.y, planoCorte.constant);
-          const dir = dirGeneral.clone().setY(0).normalize().multiplyScalar(0.85).add(new THREE.Vector3(0, 0.8, 0));
-          volarA(b.getCenter(new THREE.Vector3()), esquinas(b), dir, 0.8);
-        } else vistaGeneral(0.8);
-      }
+    // Para las pruebas y el teclado: alterna el corte a la altura por defecto
+    corte: () => fijarCorte(cortado ? null : ALTURA_CORTE),
+    // Correcciones del 14/11 (n.° 5): estructura con sus colores reales o transparente
+    colores: async (boton) => {
+      estructuraColor = !estructuraColor;
+      boton?.setAttribute("aria-checked", String(estructuraColor));
+      await aplicarAtenuado();
       await motor.update(true);
-      avisar(1200);
+      avisar(900);
     },
     aislar: async (boton) => {
       const guids = seleccionActual ?? objetivo.guids;
@@ -815,11 +878,42 @@ export async function abrirVisor(caja, bien, bienesPorCodigo, cb) {
   const alBoton = (e) => {
     const v = e.target.closest("[data-vista]");
     if (v) return acciones.vista(v.dataset.vista);
+    const m = e.target.closest("[data-menu]");
+    // Tocar el botón solo abre o cierra su menú: no aplica nada
+    if (m) return menuAbierto === m.dataset.menu ? cerrarMenu() : abrirMenu(m.dataset.menu, !conMouse);
+    const c = e.target.closest("[data-corte]");
+    if (c) {
+      const t = c.dataset.corte;
+      const campo = menus.corte?.querySelector("input");
+      if (t === "defecto") {
+        if (campo) campo.value = String(ALTURA_CORTE);
+        fijarCorte(ALTURA_CORTE);
+      } else if (t === "quitar") fijarCorte(null);
+      else {
+        const h = Number(String(campo?.value ?? "").replace(",", "."));
+        if (!Number.isFinite(h) || h < 0.3 || h > 8) {
+          campo?.setCustomValidity("Escribe una altura entre 0,3 y 8 m");
+          campo?.reportValidity();
+          return;
+        }
+        campo.setCustomValidity("");
+        fijarCorte(h);
+      }
+      return cerrarMenu();
+    }
+    if (e.target.closest(".visor-menu")) return;
     const b = e.target.closest("[data-accion]");
     if (b) acciones[b.dataset.accion]?.(b);
     else cerrarMenu();
   };
   caja.addEventListener("click", alBoton);
+  const alTeclaMenu = (e) => {
+    if (e.key === "Enter" && e.target.matches?.(".visor-menu-corte input")) {
+      e.preventDefault();
+      menus.corte.querySelector('[data-corte="aplicar"]')?.click();
+    }
+  };
+  caja.addEventListener("keydown", alTeclaMenu);
 
   // Tocar un elemento: se identifica por el mismo índice que une modelo y datos
   let abajo = null;
@@ -837,17 +931,21 @@ export async function abrirVisor(caja, bien, bienesPorCodigo, cb) {
     rayo.setFromCamera(new THREE.Vector2(((e.clientX - r.x) / r.width) * 2 - 1, -((e.clientY - r.y) / r.height) * 2 + 1), camara);
     let mejor = null;
     let dist = Infinity;
+    let dObjetivo = Infinity;
     for (const c of cajas) {
       const punto = rayo.ray.intersectBox(c.caja, new THREE.Vector3());
       if (!punto) continue;
       const d = punto.distanceTo(camara.position);
-      // El bien buscado tiene prioridad sobre lo que está atenuado delante
-      if (c.codigo === objetivo.codigo) return { codigo: c.codigo, d: 0 };
+      if (c.codigo === objetivo.codigo) dObjetivo = d;
       if (d < dist) {
         dist = d;
         mejor = c.codigo;
       }
     }
+    // Correcciones del 14/11 (n.° 1): antes el bien buscado ganaba siempre que el rayo cruzara su caja, aunque
+    // estuviera detrás, y no se podía elegir el equipo de al lado. Ahora gana el más cercano; el buscado solo
+    // conserva prioridad si está casi a la misma distancia (lo atenuado delante no lo tapa)
+    if (dObjetivo < Infinity && dObjetivo - dist < 0.25) return { codigo: objetivo.codigo, d: dObjetivo };
     return mejor ? { codigo: mejor, d: dist } : null;
   };
 
@@ -902,7 +1000,7 @@ export async function abrirVisor(caja, bien, bienesPorCodigo, cb) {
     const alto = { ArrowUp: -0.1, ArrowDown: 0.1 }[e.key];
     const zoom = { "+": 0.85, "=": 0.85, "-": 1.18 }[e.key];
     if (e.key === "Escape") {
-      if (!menu?.hidden) return cerrarMenu();
+      if (menuAbierto) return cerrarMenu();
       return quitarSeleccion();
     }
     if (giro === undefined && alto === undefined && zoom === undefined) return;
@@ -963,6 +1061,8 @@ export async function abrirVisor(caja, bien, bienesPorCodigo, cb) {
       },
       edificio: () => ({ largo: +edificio.largo.toFixed(2), ancho: +edificio.ancho.toFixed(2), conColumnas: edificio.conColumnas, frente: edificio.frente.toArray(), derecha: edificio.derecha.toArray(), centro: edificio.centro.toArray() }),
       cubo: () => cubo?.style.transform ?? null,
+      corteA: () => (cortado ? +(planoCorte.constant - yPiso).toFixed(2) : null),
+      colores: () => estructuraColor,
       distancia: () => camara.position.distanceTo(controles.target),
       // Fracción de la zona libre que ocupa el edificio (1 = la llena en ancho o en alto)
       ocupacion: () => {
@@ -983,6 +1083,13 @@ export async function abrirVisor(caja, bien, bienesPorCodigo, cb) {
         return { x: r.x + (v.x * 0.5 + 0.5) * r.width, y: r.y + (-v.y * 0.5 + 0.5) * r.height };
       },
       seleccion: () => ultimaSeleccion,
+      pantallaDeBien: async (cod) => {
+        const c = (await cargarCajas()).find((x) => x.codigo === cod);
+        if (!c) return null;
+        v.copy(c.caja.getCenter(new THREE.Vector3())).project(camara);
+        const r = renderer.domElement.getBoundingClientRect();
+        return { x: r.x + (v.x * 0.5 + 0.5) * r.width, y: r.y + (-v.y * 0.5 + 0.5) * r.height };
+      },
       puntoContenedor: async (cod) => {
         const b = await modelo.getMergedBox(await ids(indice.contenedores[cod]));
         v.copy(b.getCenter(new THREE.Vector3()).setY(b.max.y)).project(camara);
@@ -1007,6 +1114,9 @@ export async function abrirVisor(caja, bien, bienesPorCodigo, cb) {
     observador.disconnect();
     controles.dispose();
     caja.removeEventListener("click", alBoton);
+    caja.removeEventListener("keydown", alTeclaMenu);
+    caja.removeEventListener("mouseover", alEntrar);
+    caja.removeEventListener("mouseout", alSalir);
     renderer.domElement.removeEventListener("pointerdown", alBajar);
     renderer.domElement.removeEventListener("pointerup", alSubir);
     escena.remove(modelo.object);
@@ -1015,5 +1125,106 @@ export async function abrirVisor(caja, bien, bienesPorCodigo, cb) {
   };
   // La hoja del equipo (fuera del visor) suelta la selección con su X
   cerrar.quitarSeleccion = quitarSeleccion;
+  return cerrar;
+}
+
+// ---------- Correcciones del 14/11 (n.° 8): el equipo en 3D dentro de su ficha, para girarlo y moverlo.
+// Usa el mismo motor, modelo y renderizador que el Mapa 3D (nunca están en pantalla a la vez) y deja ver solo el equipo.
+let miniCerrar = null;
+export function tieneModelo(codigo) {
+  return fetch("./modelo/indice_modelo.json")
+    .then((r) => (r.ok ? r.json() : null))
+    .then((ind) => !!ind?.bienes?.[codigo]?.length)
+    .catch(() => false);
+}
+export async function abrirMini(caja, codigo) {
+  miniCerrar?.();
+  await preparar(() => {});
+  if (!caja.isConnected) return () => {};
+  const guids = indice.bienes[codigo];
+  if (!guids?.length) return () => {};
+  if (!renderer) {
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: EN_PRUEBA });
+    renderer.setPixelRatio(PR_MAX);
+    renderer.domElement.setAttribute("tabindex", "0");
+  }
+  renderer.domElement.setAttribute("aria-label", "Modelo 3D del equipo: arrastra para girarlo");
+  renderer.clippingPlanes = [];
+  caja.prepend(renderer.domElement);
+  const escena = new THREE.Scene();
+  escena.add(new THREE.HemisphereLight(0xffffff, 0xaaa69c, 1.9));
+  const sol = new THREE.DirectionalLight(0xffffff, 1.2);
+  sol.position.set(10, 20, 14);
+  escena.add(sol);
+  const camara = new THREE.PerspectiveCamera(35, 1, 0.01, 200);
+  const controles = new OrbitControls(camara, renderer.domElement);
+  controles.enableDamping = true;
+  controles.dampingFactor = 0.12;
+  modelo.useCamera(camara);
+  escena.add(modelo.object);
+
+  const todos = [...Object.values(indice.bienes).flat(), ...Object.values(indice.contenedores).flat(), ...(indice.entorno ?? []), ...(indice.piso ?? []), ...(indice.otros ?? []), ...(indice.ocultar ?? [])];
+  const idsTodos = (await modelo.getLocalIdsByGuids(todos)).filter((x) => x !== null);
+  const idsBien = (await modelo.getLocalIdsByGuids(guids)).filter((x) => x !== null);
+  await modelo.resetHighlight();
+  await modelo.resetOpacity(undefined);
+  await modelo.setVisible(idsTodos, false);
+  await modelo.setVisible(idsBien, true);
+  const b = await modelo.getMergedBox(idsBien);
+  const c = b.getCenter(new THREE.Vector3());
+  const r = Math.max(b.getSize(new THREE.Vector3()).length() / 2, 0.05);
+  controles.target.copy(c);
+  controles.minDistance = r * 0.6;
+  controles.maxDistance = r * 8;
+
+  let vivo = true;
+  let hasta = 0;
+  const avisar = (ms = 700) => (hasta = Math.max(hasta, performance.now() + ms));
+  const encuadrar = () => {
+    const { clientWidth: a, clientHeight: h } = caja;
+    if (!a || !h) return;
+    renderer.setSize(a, h);
+    camara.aspect = a / h;
+    camara.updateProjectionMatrix();
+    const vert = THREE.MathUtils.degToRad(camara.fov / 2);
+    const d = (r / Math.sin(Math.min(vert, Math.atan(Math.tan(vert) * camara.aspect)))) * 1.05;
+    // Isométrico: desde una esquina, a unos 30° de altura
+    camara.position.copy(c).add(new THREE.Vector3(1, 0.82, 1).normalize().multiplyScalar(d));
+    controles.update();
+    motor.update(true);
+    avisar(1200);
+  };
+  const obs = new ResizeObserver(encuadrar);
+  obs.observe(caja);
+  encuadrar();
+  controles.addEventListener("change", () => {
+    motor.update();
+    avisar();
+  });
+  const bucle = () => {
+    if (!vivo) return;
+    // Si la ficha cambió y la caja ya no está, se libera todo
+    if (!caja.isConnected) return cerrar();
+    requestAnimationFrame(bucle);
+    if (performance.now() < hasta) {
+      controles.update();
+      renderer.render(escena, camara);
+    }
+  };
+  const refresco = setInterval(() => vivo && avisar(250), 1500);
+  bucle();
+  caja.classList.add("listo");
+  function cerrar() {
+    if (!vivo) return;
+    vivo = false;
+    clearInterval(refresco);
+    obs.disconnect();
+    controles.dispose();
+    escena.remove(modelo.object);
+    if (renderer.domElement.parentElement === caja) renderer.domElement.remove();
+    if (miniCerrar === cerrar) miniCerrar = null;
+  }
+  miniCerrar = cerrar;
+  if (EN_PRUEBA) window.__mini = { codigo, visibles: idsBien.length, info: () => ({ tris: renderer.info.render.triangles, vivo }) };
   return cerrar;
 }

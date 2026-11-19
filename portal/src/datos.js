@@ -16,7 +16,7 @@ export function nuevoBien(x) {
     Estado_operativo: v.Estado_operativo || "Pendiente", Estado_operativo_fuente: `Alta en el portal (${x.autor})`,
     Estado_conservacion: v.Estado_conservacion || "Pendiente", Funcion_medicion: "Pendiente", Estado_metrologico: "Pendiente",
     Proxima_fecha: "Pendiente", Verificacion_inicial: "Pendiente", Plan_mantenimiento: "Pendiente", Software_firmware: "Pendiente",
-    Ultima_OT: "Pendiente", Manual_fabrica: "", Manual_fabrica_URL: "", Manual_operacion_URL: "",
+    Ultima_OT: "Pendiente", Manual_fabrica: "", Manual_fabrica_URL: "", Manual_operacion_URL: "", Inspection_tag: "",
     V3_pregunta: "Pendiente", V3_respuesta: "Pendiente", V3_fuente: "Pendiente", Especificaciones: [], Historial: [],
   };
 }

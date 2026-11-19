@@ -22,7 +22,7 @@ RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATOS = os.path.join(RAIZ, "portal", "public", "datos")
 ACT = os.path.join(DATOS, "actualizaciones.json")
 CAMPOS_BIENES = {"Estado_operativo", "Estado_operativo_fuente", "Estado_conservacion", "Estado_metrologico", "Proxima_fecha",
-                 "Ultima_OT", "Contenedor", "Ubicacion_texto", "Ubicacion_estado", "Foto"}
+                 "Ultima_OT", "Contenedor", "Ubicacion_texto", "Ubicacion_estado", "Foto", "Inspection_tag"}
 
 
 def fila_alta(x):
@@ -93,6 +93,12 @@ def main():
                 fila = {"Codigo_LH": x["codigo"], "Fecha": v["fecha"], "Tipo": v["tipo"], "Resultado": v["resultado"]}
                 hi.append([fila.get(c, "") for c in cab_i])
         elif x["campo"] in CAMPOS_BIENES:
+            if x["campo"] not in cab:
+                # Columna nueva (por ejemplo Inspection_tag): se agrega al final de la hoja BIENES
+                if aplicar:
+                    hb.cell(1, len(cab) + 1).value = x["campo"]
+                cab.append(x["campo"])
+                print(f"  (columna nueva en BIENES: {x['campo']})")
             col = cab.index(x["campo"]) + 1
             antes = hb.cell(r, col).value
             print(f"  {x['codigo']}: {x['campo']}: {antes!r} -> {x['valor']!r}")

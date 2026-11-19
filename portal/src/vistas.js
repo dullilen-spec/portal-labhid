@@ -32,6 +32,7 @@ export const ICONO = {
   tubo: trazo('<path d="M8 3h8M9 3v12a3 3 0 0 0 6 0V3M9 11h6"/>'),
   campana: trazo('<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/>'),
   alerta: trazo('<path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/>'),
+  etiqueta: trazo('<path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.5"/>'),
 };
 
 export const TIPOS = {
@@ -85,12 +86,16 @@ function rango(b, q) {
   return 3;
 }
 
+// Correcciones del 14/11 (n.° 7): mesas, escritorios, armarios y demás muebles (código LH-MOB)
+const MOBILIARIO = "MOB";
+const esDelTipo = (b, tipo) => (tipo === MOBILIARIO ? b.Codigo_LH.startsWith("LH-MOB-") : b.Tipo_ficha === tipo);
+
 export function filtrar(bienes, consulta, tipo = "") {
   const q = normalizar(consulta).trim();
   const palabras = q.split(/\s+/).filter(Boolean);
   return bienes
     .filter((b) => {
-      if (tipo && b.Tipo_ficha !== tipo) return false;
+      if (tipo && !esDelTipo(b, tipo)) return false;
       const t = textoBusqueda(b);
       return palabras.every((p) => t.includes(p));
     })
@@ -224,6 +229,7 @@ export function vistaInicio(raiz, bienes, navegar, seleccion = null) {
       <div class="filtros" role="group" aria-label="Filtrar por tipo">
         <button type="button" data-tipo="">Todos</button>
         ${Object.entries(TIPOS).map(([k, v]) => `<button type="button" data-tipo="${k}">${v.corto}</button>`).join("")}
+        <button type="button" data-tipo="${MOBILIARIO}">Mobiliario</button>
       </div>
     </section>
     <div class="inicio-cuerpo">
@@ -368,6 +374,13 @@ export function vistaFicha(raiz, b, bienes) {
   const botonManual = manualURL
     ? `<a class="boton claro" href="${esc(manualURL)}" target="_blank" rel="noopener">${ICONO.libro}Abrir manual</a>`
     : `<span class="boton claro off" aria-disabled="true">${ICONO.libro}Manual pendiente</span>`;
+  // Correcciones del 14/11 (n.° 9): foto de la placa «Inspection Tag» del fabricante
+  const esEssom = /essom/i.test(`${b.Fabricante} ${b.Marca_modelo}`);
+  const botonTag = b.Inspection_tag
+    ? `<button type="button" class="boton claro" data-tag="./${esc(b.Inspection_tag)}">${ICONO.etiqueta}Abrir Inspection Tag</button>`
+    : esEssom
+      ? `<span class="boton claro off" aria-disabled="true" title="Se sube desde el panel de mantenimiento">${ICONO.etiqueta}Inspection Tag pendiente</span>`
+      : "";
   const boton3d = tieneLugar(b)
     ? `<a class="boton grafito" data-interno href="${enlace(b.Codigo_LH, "&ver=3d")}">${ICONO.cubo}Ubicar en 3D</a>`
     : `<span class="boton grafito off" aria-disabled="true">${ICONO.cubo}Sin ubicación</span>`;
@@ -383,6 +396,7 @@ export function vistaFicha(raiz, b, bienes) {
     <article class="ficha">
       <div class="heroe${b.Foto ? "" : " sin-foto"}">
         ${b.Foto ? `<img src="./${esc(b.Foto)}" alt="Fotografía de ${esc(b.Nombre)}" fetchpriority="high" />` : `<span>${ICONO.cubo}<small>Sin fotografía registrada</small></span>`}
+        <div class="heroe-3d" hidden aria-label="Modelo 3D del equipo"></div>
         <a class="volver" data-interno href="./" aria-label="Volver al buscador">${ICONO.atras}</a>
       </div>
       <header class="cabeza placa">
@@ -393,7 +407,7 @@ export function vistaFicha(raiz, b, bienes) {
         <h1>${esc(b.Nombre)}</h1>
         <p class="modelo">${esc(b.Marca_modelo)}</p>
         <p class="codigo">${esc(b.Codigo_LH)}</p>
-        <div class="placa-acciones">${botonManual}${boton3d}</div>
+        <div class="placa-acciones">${botonManual}${boton3d}${botonTag}</div>
         ${b._actualizado ? `<p class="ficha-actualizada">Actualizado el ${esc(fechaCorta(b._actualizado))}</p>` : ""}
       </header>
 
@@ -439,6 +453,48 @@ export function vistaFicha(raiz, b, bienes) {
       <p class="reportar"><a class="boton sec chico" href="${esc(enlaceReporte(b.Codigo_LH, b.Nombre))}" target="_blank" rel="noopener">${ICONO.alerta}Reportar un dato o una falla</a></p>
     </article>`;
   document.title = `${b.Nombre} | Equipos LABHID`;
+  raiz.querySelector("[data-tag]")?.addEventListener("click", (e) => verTag(e.currentTarget.dataset.tag, b));
+  montar3dFicha(raiz, b);
+}
+
+// Correcciones del 14/11 (n.° 9): la foto de la placa se abre encima de la ficha, sin salir de ella
+function verTag(src, b) {
+  const d = document.createElement("dialog");
+  d.className = "tag-dialogo";
+  d.innerHTML = `<figure><img src="${esc(src)}" alt="Placa Inspection Tag de ${esc(b.Nombre)}" /><figcaption>Inspection Tag · ${esc(b.Nombre)} · ${esc(b.Codigo_LH)}</figcaption></figure>
+    <div class="tag-acciones"><a class="boton sec chico" href="${esc(src)}" target="_blank" rel="noopener">Abrir en otra pestaña</a><button type="button" class="boton chico" data-cerrar>Cerrar</button></div>`;
+  document.body.append(d);
+  d.addEventListener("click", (e) => {
+    if (e.target === d || e.target.closest("[data-cerrar]")) d.close();
+  });
+  d.addEventListener("close", () => d.remove());
+  d.showModal();
+}
+
+// Correcciones del 14/11 (n.° 8): al lado de la foto, el equipo en 3D para girarlo. Solo para los equipos con
+// modelo propio. En computadora se carga solo; en celular, al tocar (cuida los datos móviles)
+async function montar3dFicha(raiz, b) {
+  const caja = raiz.querySelector(".heroe-3d");
+  if (!caja || !tieneLugar(b)) return;
+  const { tieneModelo } = await import("./visor.js");
+  if (!(await tieneModelo(b.Codigo_LH)) || !caja.isConnected) return;
+  caja.hidden = false;
+  caja.closest(".heroe").classList.add("con-3d");
+  const cargar = async () => {
+    caja.innerHTML = `<span class="heroe-3d-aviso">Cargando el 3D...</span>`;
+    try {
+      const { abrirMini } = await import("./visor.js");
+      await abrirMini(caja, b.Codigo_LH);
+      caja.querySelector(".heroe-3d-aviso")?.remove();
+      caja.insertAdjacentHTML("beforeend", `<span class="heroe-3d-ayuda">Arrastra para girar · dos dedos o rueda para acercar</span>`);
+    } catch {
+      caja.innerHTML = `<span class="heroe-3d-aviso">No se pudo cargar el 3D en este dispositivo</span>`;
+    }
+  };
+  const auto = matchMedia("(min-width: 1000px)").matches && !navigator.connection?.saveData;
+  if (auto) return cargar();
+  caja.innerHTML = `<button type="button" class="heroe-3d-boton">${ICONO.cubo}<span>Ver el equipo en 3D</span><small>Gíralo y acércalo</small></button>`;
+  caja.querySelector("button").addEventListener("click", cargar, { once: true });
 }
 
 export function vistaNoEncontrado(raiz, id) {
@@ -493,18 +549,19 @@ export function vistaAcerca(raiz, modelo = null) {
   document.title = "Acerca | Equipos LABHID";
 }
 
-const NOMBRE_ACCION = { foco: "Ubicación", vistas: "Vistas", general: "General", planta: "Planta", muros: "Sin muros", corte: "Corte", aislar: "Aislar", pantalla: "Ampliar" };
-const ICONO_ACCION = { foco: ICONO.foco, vistas: ICONO.cubo, general: ICONO.general, planta: ICONO.planta, muros: ICONO.muros, corte: ICONO.corte, aislar: ICONO.aislar, pantalla: ICONO.ampliar };
+const NOMBRE_ACCION = { foco: "Ubicación", general: "General", vista: "Vista", muros: "Sin muros", corte: "Corte", aislar: "Aislar", pantalla: "Ampliar" };
+const ICONO_ACCION = { foco: ICONO.foco, general: ICONO.general, vista: ICONO.planta, muros: ICONO.muros, corte: ICONO.corte, aislar: ICONO.aislar, pantalla: ICONO.ampliar };
+// «Vista» y «Corte» abren un menú (al pasar el mouse o al tocar); no hacen nada por sí solos
+const CON_MENU = new Set(["vista", "corte"]);
+const TITULO_ACCION = { foco: "Volver a la ubicación", vista: "Planta, frontal, atrás, izquierda y derecha", corte: "Cortar a una altura" };
 
-// v05b: vistas del edificio (pedido del 15/11). Los nombres son los del cubo de Revit
+// Correcciones del 14/11 (n.° 3): el menú «Vista» tiene estas cinco, en este orden
 const VISTAS = [
-  ["general", "General", "La vista inicial, desde el interior"],
-  ["isometrico", "Isométrico", "Desde la esquina frontal derecha"],
-  ["frontal", "Frontal", "Desde el muro cortina"],
-  ["posterior", "Posterior", "Desde atrás"],
-  ["izquierda", "Izquierda", "Lateral izquierdo, mirando el frente"],
-  ["derecha", "Derecha", "Lateral derecho, mirando el frente"],
-  ["planta", "Planta", "Desde arriba, con el frente abajo"],
+  ["planta", "Planta"],
+  ["derecha", "Derecha"],
+  ["izquierda", "Izquierda"],
+  ["posterior", "Atrás"],
+  ["frontal", "Frontal"],
 ];
 const CARAS_CUBO = [
   ["frente", "frontal", "Frente"],
@@ -577,7 +634,7 @@ function hojaMueble(cod, bienes) {
 export async function vistaVisor(raiz, b, bienes, { estaCerrado }) {
   const porCodigo = new Map(bienes.map((x) => [x.Codigo_LH, x]));
   const ancho = innerWidth >= 700;
-  const acciones = (b ? ["foco", "vistas", "muros", "corte", "aislar", "pantalla"] : ["vistas", "muros", "corte", "aislar", "pantalla"])
+  const acciones = (b ? ["foco", "general", "vista", "muros", "corte", "aislar", "pantalla"] : ["general", "vista", "muros", "corte", "aislar", "pantalla"])
     .filter((a) => a !== "pantalla" || (document.fullscreenEnabled && ancho));
   raiz.innerHTML = `
     <section class="visor-pagina">
@@ -603,11 +660,21 @@ export async function vistaVisor(raiz, b, bienes, { estaCerrado }) {
             ${CARAS_CUBO.map(([c, v, t]) => (v ? `<button type="button" class="cara ${c}" data-vista="${v}" title="Vista ${esc(VISTAS.find((x) => x[0] === v)[1].toLowerCase())}">${t}</button>` : `<span class="cara ${c}" aria-hidden="true"></span>`)).join("")}
           </div></div>
         </div>
-        <div class="visor-vistas" role="menu" aria-label="Vistas del edificio" hidden>
-          ${VISTAS.map(([v, t, d]) => `<button type="button" role="menuitem" data-vista="${v}"><strong>${t}</strong><small>${d}</small></button>`).join("")}
+        <div class="visor-menu visor-menu-vista" role="menu" aria-label="Vista" hidden>
+          ${VISTAS.map(([v, t]) => `<button type="button" role="menuitem" data-vista="${v}">${t}</button>`).join("")}
         </div>
+        <div class="visor-menu visor-menu-corte" role="group" aria-label="Corte horizontal" hidden>
+          <p class="menu-estado">Sin corte</p>
+          <label class="corte-altura">Altura <input type="number" inputmode="decimal" min="0.3" max="8" step="0.1" value="2.2" aria-label="Altura de corte en metros" /> m</label>
+          <button type="button" data-corte="aplicar">Cortar a esa altura</button>
+          <button type="button" data-corte="defecto">Por defecto (2,2 m)</button>
+          <button type="button" data-corte="quitar" hidden>Quitar el corte</button>
+        </div>
+        <button type="button" class="visor-interruptor" data-accion="colores" role="switch" aria-checked="false" title="Estructura transparente o con sus colores">
+          <span class="pista" aria-hidden="true"><i></i></span><span class="texto">Colores de la estructura</span>
+        </button>
         <div class="visor-barra" role="toolbar" aria-label="Controles del modelo">
-          ${acciones.map((a) => `<button type="button" data-accion="${a}" title="${a === "foco" ? "Volver a la ubicación" : a === "vistas" ? "Frontal, posterior, laterales, isométrico y planta" : NOMBRE_ACCION[a]}" ${a === "muros" || a === "aislar" || a === "corte" ? 'aria-pressed="false"' : ""}${a === "vistas" ? ' aria-haspopup="menu" aria-expanded="false"' : ""}>${ICONO_ACCION[a]}<span>${NOMBRE_ACCION[a]}</span></button>`).join("")}
+          ${acciones.map((a) => `<button type="button" ${CON_MENU.has(a) ? `data-menu="${a}" aria-haspopup="true" aria-expanded="false"` : `data-accion="${a}"`} title="${TITULO_ACCION[a] ?? NOMBRE_ACCION[a]}" ${a === "muros" || a === "aislar" || a === "corte" ? 'aria-pressed="false"' : ""}>${ICONO_ACCION[a]}<span>${NOMBRE_ACCION[a]}</span></button>`).join("")}
         </div>
       </div>
       ${panelZonas(bienes)}
@@ -736,7 +803,14 @@ export async function vistaVisor(raiz, b, bienes, { estaCerrado }) {
         if (sel.tipo === "bien") {
           const x = porCodigo.get(sel.codigo);
           if (x && x.Codigo_LH === b?.Codigo_LH) return hojaBase();
-          hoja.innerHTML = x ? hojaBien(x, true, orden) : "";
+          // Correcciones del 14/11 (n.° 1): tocar otro equipo lo selecciona de verdad: cambia la cabecera,
+          // la marca amarilla y la cámara vuela a él (sin volver a la vista general)
+          if (x) {
+            history.pushState(null, "", enlace(x.Codigo_LH, "&ver=3d"));
+            dispatchEvent(new PopStateEvent("popstate"));
+            return;
+          }
+          hoja.innerHTML = "";
         } else {
           hoja.innerHTML = hojaMueble(sel.codigo, bienes);
         }
@@ -806,4 +880,19 @@ export function vistaNovedades(raiz, bienes, cambios) {
       : `<section class="aviso-grande">${ICONO.campana}<h2>Todavía no hay novedades</h2><p>Cuando el técnico actualice un equipo, el cambio aparecerá aquí.</p></section>`}
   </article>`;
   document.title = "Novedades | Equipos LABHID";
+}
+
+// Correcciones del 14/11 (n.° 6): resultados del buscador de la barra superior. En el Mapa 3D llevan al equipo
+// en el 3D; en las demás secciones, a su ficha
+export function resultadosBarra(bienes, consulta, en3d) {
+  const q = consulta.trim();
+  if (!q) return "";
+  const r = filtrar(bienes, q).slice(0, 8);
+  if (!r.length) return `<li class="sin-resultado">Sin resultados</li>`;
+  return r
+    .map((x) => {
+      const destino = en3d && tieneLugar(x) ? enlace(x.Codigo_LH, "&ver=3d") : enlace(x.Codigo_LH);
+      return `<li><a data-interno href="${destino}"><strong>${esc(x.Nombre)}</strong><small>${esc(x.Codigo_LH)} · ${tieneLugar(x) ? esc(lugarCorto(x)) : "Ubicación pendiente"}</small></a></li>`;
+    })
+    .join("");
 }

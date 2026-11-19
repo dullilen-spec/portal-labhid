@@ -4,17 +4,50 @@ import "@fontsource/saira/500.css";
 import "@fontsource/saira-condensed/600.css";
 import "@fontsource/saira-condensed/700.css";
 import { cargarDatos } from "./datos.js";
-import { ICONO, inicioDividido, vistaAcerca, vistaError, vistaFicha, vistaInicio, vistaNoEncontrado, vistaNovedades, vistaVisor } from "./vistas.js";
+import { ICONO, inicioDividido, resultadosBarra, vistaAcerca, vistaError, vistaFicha, vistaInicio, vistaNoEncontrado, vistaNovedades, vistaVisor } from "./vistas.js";
 
 const raiz = document.getElementById("app");
 const navegacion = document.getElementById("nav");
 // v03: en computadora la navegación va en la barra superior y la ficha se abre al lado de la lista
 const ESCRITORIO = matchMedia("(min-width: 1000px)");
 const buscarBarra = document.getElementById("buscar-barra");
+// Correcciones del 14/11 (n.° 6): el buscador de la barra muestra los resultados ahí mismo. En el Mapa 3D,
+// elegir uno lleva directo al equipo en el 3D
+const qBarra = buscarBarra?.querySelector("input");
+const listaBarra = document.createElement("ul");
+listaBarra.className = "barra-resultados";
+listaBarra.id = "barra-resultados";
+listaBarra.hidden = true;
+buscarBarra?.append(listaBarra);
+const cerrarBarra = () => {
+  listaBarra.hidden = true;
+  listaBarra.innerHTML = "";
+};
+qBarra?.addEventListener("input", () => {
+  listaBarra.innerHTML = resultadosBarra(bienes, qBarra.value, document.body.classList.contains("en-visor"));
+  listaBarra.hidden = !listaBarra.innerHTML;
+});
+qBarra?.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") cerrarBarra();
+});
+qBarra?.addEventListener("blur", () => setTimeout(cerrarBarra, 200));
+listaBarra.addEventListener("click", (e) => {
+  if (!e.target.closest("a")) return;
+  qBarra.value = "";
+  setTimeout(cerrarBarra, 0);
+});
 buscarBarra?.addEventListener("submit", (e) => {
   e.preventDefault();
-  const t = buscarBarra.querySelector("input").value.trim();
-  buscarBarra.querySelector("input").value = "";
+  const t = qBarra.value.trim();
+  const primero = listaBarra.querySelector("a");
+  // En el 3D, Enter va al primer resultado; en las demás secciones, a la lista completa
+  if (document.body.classList.contains("en-visor") && primero) {
+    qBarra.value = "";
+    cerrarBarra();
+    return navegar(primero.getAttribute("href"));
+  }
+  qBarra.value = "";
+  cerrarBarra();
   navegar(`./?q=${encodeURIComponent(t)}`);
 });
 let bienes = [];

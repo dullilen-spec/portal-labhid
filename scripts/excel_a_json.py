@@ -24,6 +24,8 @@ PUBLICAS = [
     "Funcion_medicion", "Estado_metrologico", "Proxima_fecha", "Verificacion_inicial",
     "Plan_mantenimiento", "Software_firmware", "Ultima_OT", "Manual_fabrica", "Manual_fabrica_URL",
     "Manual_operacion_URL", "V3_pregunta", "V3_respuesta", "V3_fuente",
+    # Correcciones del 14/11/2026 (n.° 9): foto de la placa del fabricante; si el Excel no tiene la columna, va vacía
+    "Inspection_tag",
 ]
 OBLIGATORIAS = ["Codigo_LH", "Nombre", "Contenedor", "Estado_operativo"]
 RX_CODIGO = re.compile(r"^LH-[A-Z]{3}-\d{3}(\.\d{2}){0,2}$")
@@ -115,7 +117,7 @@ def generar(entrada, salida):
         d = {c: limpiar(b.get(c)) for c in PUBLICAS}
         # Un enlace a un archivo local solo se publica si el archivo viaja con el sitio
         web = os.path.join(os.path.dirname(os.path.dirname(salida)))
-        for c in ("Manual_fabrica_URL", "Manual_operacion_URL", "Foto"):
+        for c in ("Manual_fabrica_URL", "Manual_operacion_URL", "Foto", "Inspection_tag"):
             if d[c] and not d[c].startswith("https://") and not os.path.exists(os.path.join(web, d[c])):
                 d[c] = ""
         d["Especificaciones"] = specs.get(b["Codigo_LH"], [])

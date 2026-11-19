@@ -113,11 +113,16 @@ En la página del repositorio, entra a la carpeta y usa *Add file* > *Upload fil
 - El repositorio es público: lo que subas se puede descargar. El Excel maestro y el IFC no llevan datos patrimoniales, y la publicación lo comprueba.
 - Los cambios del panel se siguen aplicando encima del Excel hasta que se sincronicen (sección 5).
 
-## 7. Mapa 3D: vistas
+## 7. Mapa 3D y ficha
 
-- **Vistas** de la barra: General, Isométrico, Frontal (desde el muro cortina), Posterior, Izquierda, Derecha y Planta.
-- **Cubo** dentro del anillo de la brújula: tocar una cara lleva a esa vista. Gira con la cámara según los ejes del edificio; la N del anillo marca el norte real.
-- **Planta:** sale alineada al edificio con el frente abajo, como en los planos de Revit.
-- **Cambiar de equipo:** las flechas de la hoja pasan al anterior o al siguiente equipo con modelo 3D, sin volver a la vista general. Tocar un espacio vacío ya no suelta la selección: se cierra con la X o con Esc.
+- **General:** isométrico cercano desde afuera, desde la esquina que mira a los equipos.
+- **Vista:** se abre al pasar el mouse (en celular, al tocar) con Planta, Derecha, Izquierda, Atrás y Frontal. Todas encuadran el edificio con sus propios ejes. La planta sale con el frente abajo, como en Revit.
+- **Corte:** se abre igual. Escribe la altura en metros sobre el piso y toca «Cortar a esa altura», o usa «Por defecto (2,2 m)». «Quitar el corte» vuelve al modelo completo.
+- **Colores de la estructura:** interruptor a la derecha. Apagado, los muros son transparentes; encendido, muestran sus materiales.
+- **Cubo** dentro del anillo de la brújula: tocar una cara lleva a esa vista. La N marca el norte real.
+- **Cambiar de equipo:** toca otro equipo en el modelo, usa las flechas de la hoja o busca con el buscador de arriba (en computadora). En los tres casos cambian la cabecera y la marca amarilla, y la cámara vuela al equipo. Tocar un espacio vacío no suelta la selección.
+- **Ficha:** al lado de la foto aparece el equipo en 3D para girarlo y acercarlo (solo los equipos con modelo propio; en celular, al tocar).
+- **Inspection Tag:** en los equipos ESSOM, la ficha tiene «Abrir Inspection Tag». La foto de la placa se sube desde el panel (sección 2, «Foto de la placa Inspection Tag»); mientras no exista, dice «pendiente».
+- **Mobiliario:** filtro en el buscador para mesas, escritorios, armarios y demás muebles (código LH-MOB).
 
 **Antes del postest (5/01/2027):** sincroniza, congela el sitio y avisa que no se usen el panel ni la hoja de campo durante la medición.

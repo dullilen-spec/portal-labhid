@@ -65,6 +65,8 @@ export const CAMPOS = {
   Ubicacion_texto: { rotulo: "Ubicación", texto: 160 },
   Ubicacion_estado: { rotulo: "Estado de la ubicación", texto: 120 },
   Foto: { rotulo: "Fotografía", foto: true },
+  // Correcciones del 14/11 (n.° 9): foto de la placa «Inspection Tag» del fabricante
+  Inspection_tag: { rotulo: "Placa Inspection Tag", foto: true },
   Historial: { rotulo: "Bitácora", evento: true },
   Alta: { rotulo: "Bien nuevo", alta: true },
 };

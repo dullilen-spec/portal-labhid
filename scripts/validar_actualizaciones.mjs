@@ -21,7 +21,7 @@ if (!fs.existsSync(ruta)) {
 const datos = leer("datos/actualizaciones.json");
 const errores = validarArchivo(datos, codigos, contenedores);
 for (const x of datos.cambios ?? []) {
-  if (x.campo === "Foto" && !fs.existsSync(path.join(PUBLICO, x.valor))) errores.push(`${x.codigo}: la foto ${x.valor} no está en el repositorio`);
+  if ((x.campo === "Foto" || x.campo === "Inspection_tag") && !fs.existsSync(path.join(PUBLICO, x.valor))) errores.push(`${x.codigo}: la foto ${x.valor} no está en el repositorio`);
 }
 if (errores.length) {
   console.error(`actualizaciones.json tiene ${errores.length} problema(s). No se publica.`);

@@ -289,6 +289,7 @@ export function vistaPanel(raiz, estado) {
       </fieldset>
       <fieldset><legend>Fotografía (opcional)</legend>
         ${campoHtml("f-foto", "Foto nueva del equipo", `<input id="f-foto" type="file" accept="image/*" />`, "Se reduce antes de subirla. Reemplaza la foto de la ficha.")}
+        ${campoHtml("f-tag", "Foto de la placa «Inspection Tag»", `<input id="f-tag" type="file" accept="image/*" capture="environment" />`, b.Inspection_tag ? "Ya tiene una; la nueva la reemplaza." : "La etiqueta de control del fabricante (ESSOM). Tómala de frente y legible.")}
       </fieldset>
       ${campoHtml("f-motivo", "Motivo del cambio", `<input id="f-motivo" type="text" maxlength="200" required />`, "Por ejemplo: revisión semanal, traslado, calibración recibida.")}
       <div class="p-acciones"><button class="boton" type="submit" data-necesita-sesion>Guardar cambios</button></div>`;
@@ -427,8 +428,10 @@ export function vistaPanel(raiz, estado) {
     const boton = form.querySelector('[type="submit"]');
     const motivo = form.querySelector("#f-motivo").value.trim();
     const archivo = form.querySelector("#f-foto").files[0];
+    const archivoTag = form.querySelector("#f-tag").files[0];
     const base = reunirCambios(b);
     if (archivo) base.push({ campo: "Foto", antes: b.Foto ?? "", valor: `fotos/${b.Codigo_LH}.${sello()}.webp` });
+    if (archivoTag) base.push({ campo: "Inspection_tag", antes: b.Inspection_tag ?? "", valor: `fotos/${b.Codigo_LH}.tag.${sello()}.webp` });
     if (!base.length) return decir("No hay cambios que guardar.", "obs");
     const fecha = new Date().toISOString();
     const nuevos = base.map((x, i) => ({ id: idCambio(i), codigo: b.Codigo_LH, ...x, fecha, autor: sesion.autor, motivo }));
@@ -437,8 +440,11 @@ export function vistaPanel(raiz, estado) {
     boton.disabled = true;
     decir("Guardando...");
     try {
-      const foto = nuevos.find((x) => x.campo === "Foto");
-      if (foto) await escribir(`${RUTA_FOTOS}/${foto.valor.split("/")[1]}`, await fotoWebp(archivo), `Foto de ${b.Codigo_LH} (${sesion.autor})`, null, sesion.token);
+      for (const [campo, arch, nombre] of [["Foto", archivo, "Foto"], ["Inspection_tag", archivoTag, "Inspection Tag"]]) {
+        const x = nuevos.find((y) => y.campo === campo);
+        // La placa se sube a más resolución para que se lea la letra
+        if (x) await escribir(`${RUTA_FOTOS}/${x.valor.split("/")[1]}`, await fotoWebp(arch, campo === "Foto" ? 1200 : 1600, 0.85), `${nombre} de ${b.Codigo_LH} (${sesion.autor})`, null, sesion.token);
+      }
       await agregarAlArchivo(RUTA_ACTUALIZACIONES, sesion.token, `Actualiza ${b.Codigo_LH}: ${[...new Set(nuevos.map((x) => x.campo))].join(", ")} (${sesion.autor})`, (json) => {
         const datos = json ?? { version: 1, cambios: [] };
         datos.cambios.push(...nuevos);

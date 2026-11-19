@@ -110,8 +110,8 @@ if (rumboX !== null) {
   };
 }
 
-// Altura del corte del visor sobre la cara superior del piso (pedido de R. Castillo, 7/11/2026)
-const corte = { altura_m: Number(opcion("corte") ?? 1.8), piso_base: pisoBase };
+// Altura del corte del visor sobre la cara superior del piso (R. Castillo: 1,8 m el 7/11; 2,2 m por defecto desde el 14/11)
+const corte = { altura_m: Number(opcion("corte") ?? 2.2), piso_base: pisoBase };
 // v05: el visor encuadra con el edificio (muros, muro cortina y columnas), no con las veredas ni el volado
 const encuadre = conGeometria([T.IFCWALL, T.IFCWALLSTANDARDCASE, T.IFCCURTAINWALL, T.IFCCOLUMN]);
 // v05b: las columnas dan los ejes propios del edificio (en el visor está girado) y el muro cortina marca el frente,

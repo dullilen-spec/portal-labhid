@@ -273,26 +273,34 @@ try {
   await espera(2400);
   await captura("7_HB015_v06.png");
 
-  // v05b: vistas, cubo, encuadre del isométrico y cambio de equipo (pedidos del 15/11)
+  // v05b y correcciones del 14/11/2026: vistas, cubo, encuadre, corte, colores, cambio de equipo
   const ed = await evalua("window.__visor.edificio()");
   caso("Los ejes del edificio salen de las columnas", ed.conColumnas && ed.largo > 8 && ed.ancho > 8, `${ed.largo} x ${ed.ancho} m`);
   caso("El cubo de vistas se ve en el celular", await evalua("(() => { const c = document.querySelector('.visor-cubo'); const r = c?.getBoundingClientRect(); return !!c && !c.hidden && r.width > 50 && r.right <= innerWidth; })()"));
-  const nVistas = await evalua("document.querySelectorAll('.visor-vistas [data-vista]').length");
-  caso("El menú «Vistas» tiene frontal, posterior, laterales, isométrico, planta y general", nVistas === 7, `${nVistas} vistas`);
-  await evalua("document.querySelector('[data-accion=vistas]').click()");
+  const barra = await evalua("[...document.querySelectorAll('.visor-barra button span')].map((s) => s.textContent).join(',')");
+  caso("La barra tiene General y «Vista» (antes «Planta»)", barra.includes("General") && barra.includes("Vista") && !barra.includes("Planta"), barra);
+  // n.° 3: «Vista» abre un menú chico con cinco opciones
+  const opciones = await evalua("[...document.querySelectorAll('.visor-menu-vista [data-vista]')].map((b) => b.textContent).join(',')");
+  caso("«Vista» ofrece Planta, Derecha, Izquierda, Atrás y Frontal", opciones === "Planta,Derecha,Izquierda,Atrás,Frontal", opciones);
+  await evalua("document.querySelector('[data-menu=vista]').click()");
   await espera(300);
-  caso("El menú se abre dentro de la pantalla", await evalua("(() => { const m = document.querySelector('.visor-vistas'); const r = m.getBoundingClientRect(); return !m.hidden && r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight; })()"));
-  await captura("8_menu_vistas_celular.png");
-  await evalua("document.querySelector('.visor-vistas [data-vista=isometrico]').click()");
-  caso("Elegir una vista cierra el menú", await evalua("document.querySelector('.visor-vistas').hidden"));
+  const mv = await evalua("(() => { const m = document.querySelector('.visor-menu-vista'); const r = m.getBoundingClientRect(); const v = document.querySelector('#visor').getBoundingClientRect(); return { abierto: !m.hidden, dentro: r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight, parte: (r.width * r.height) / (v.width * v.height) }; })()");
+  caso("El menú «Vista» sale chico, junto al botón, sin tapar el modelo", mv.abierto && mv.dentro && mv.parte < 0.08, `ocupa ${(mv.parte * 100).toFixed(1)} % del visor`);
+  await captura("8_menu_vista_celular.png");
+  await evalua("document.querySelector('.visor-menu-vista [data-vista=planta]').click()");
+  caso("Elegir una vista cierra el menú", await evalua("document.querySelector('.visor-menu-vista').hidden"));
   await evalua("window.__visor.saltarVuelo()");
-  // En celular vertical manda el ancho: la distancia sigue siendo grande, lo que importa es que el edificio llene la pantalla
+  const ocPlanta = await evalua("window.__visor.ocupacion()");
+  caso("La planta sale cerca y alineada al edificio", ocPlanta >= 0.85 && ocPlanta <= 1.15, `ocupa ${Math.round(ocPlanta * 100)} %`);
+  // n.° 2: General cercano
+  await evalua("document.querySelector('[data-accion=general]').click()");
+  await evalua("window.__visor.saltarVuelo()");
   const ocCel = await evalua("window.__visor.ocupacion()");
-  caso("El isométrico en celular llena la zona libre", ocCel >= 0.85 && ocCel <= 1.15, `ocupa ${Math.round(ocCel * 100)} % a ${(await evalua("window.__visor.distancia()")).toFixed(1)} m`);
+  caso("«General» en celular llena la zona libre", ocCel >= 0.85 && ocCel <= 1.15, `ocupa ${Math.round(ocCel * 100)} % a ${(await evalua("window.__visor.distancia()")).toFixed(1)} m`);
   await espera(400);
-  await captura("9_isometrico_celular.png");
+  await captura("9_general_celular.png");
   const caras = {};
-  for (const [cara, vista] of [["frente", "frontal"], ["der", "derecha"], ["atras", "posterior"], ["izq", "izquierda"]]) {
+  for (const vista of ["frontal", "derecha", "posterior", "izquierda"]) {
     await evalua(`window.__visor.vista('${vista}')`);
     await evalua("window.__visor.saltarVuelo()");
     caras[vista] = await evalua("window.__visor.cubo()");
@@ -301,6 +309,33 @@ try {
   await evalua("document.querySelector('.cara.frente').click()");
   await evalua("window.__visor.saltarVuelo()");
   caso("Tocar una cara del cubo lleva a esa vista", (await evalua("window.__visor.cubo()")).includes("rotateY(0deg)"));
+  // n.° 4: Corte
+  await evalua("document.querySelector('[data-menu=corte]').click()");
+  await espera(300);
+  caso("Tocar «Corte» solo abre su menú, sin cortar", (await evalua("!document.querySelector('.visor-menu-corte').hidden")) && (await evalua("window.__visor.corteA()")) === null);
+  await captura("8b_menu_corte_celular.png");
+  await evalua("document.querySelector('[data-corte=defecto]').click()");
+  await espera(400);
+  caso("«Por defecto» corta a 2,2 m del piso", (await evalua("window.__visor.corteA()")) === 2.2, String(await evalua("window.__visor.corteA()")));
+  await evalua("document.querySelector('[data-menu=corte]').click()");
+  await evalua(`(() => { const i = document.querySelector('.visor-menu-corte input'); i.value = '1.5'; document.querySelector('[data-corte=aplicar]').click(); })()`);
+  await espera(400);
+  caso("Se puede cortar a la altura que se escriba", (await evalua("window.__visor.corteA()")) === 1.5, String(await evalua("window.__visor.corteA()")));
+  await evalua("document.querySelector('[data-menu=corte]').click()");
+  await evalua(`(() => { const i = document.querySelector('.visor-menu-corte input'); i.value = '40'; document.querySelector('[data-corte=aplicar]').click(); })()`);
+  caso("Una altura imposible no se aplica", (await evalua("window.__visor.corteA()")) === 1.5);
+  await evalua("document.querySelector('[data-corte=quitar]').click()");
+  await espera(400);
+  caso("«Quitar el corte» vuelve al modelo completo", (await evalua("window.__visor.corteA()")) === null);
+  // n.° 5: interruptor de colores
+  caso("El interruptor de la estructura se ve y empieza en transparente", await evalua("(() => { const b = document.querySelector('.visor-interruptor'); const r = b.getBoundingClientRect(); return b.getAttribute('aria-checked') === 'false' && r.width > 40 && r.right <= innerWidth; })()"));
+  await evalua("document.querySelector('.visor-interruptor').click()");
+  await espera(600);
+  caso("El interruptor pone la estructura en colores", (await evalua("window.__visor.colores()")) === true && (await evalua("document.querySelector('.visor-interruptor').getAttribute('aria-checked')")) === "true");
+  await captura("9b_colores_celular.png");
+  await evalua("document.querySelector('.visor-interruptor').click()");
+  await espera(400);
+  caso("Y la vuelve a dejar transparente", (await evalua("window.__visor.colores()")) === false);
   // Volver al equipo, seleccionarlo y tocar un espacio vacío: la selección se mantiene
   await evalua("window.__visor.accion('foco')");
   await evalua("window.__visor.saltarVuelo()");
@@ -334,22 +369,101 @@ try {
   await evalua("window.__visor.saltarVuelo()");
   await espera(800);
   await evalua("window.__visor.saltarVuelo()");
-  await evalua("window.__visor.vista('isometrico')");
+  // n.° 1: tocar otro equipo cambia la selección, la cabecera y lleva al equipo
+  // Primero se aleja la cámara (planta del entorno del equipo), como haría una persona, para ver el equipo de al lado
+  await evalua("window.__visor.accion('planta')");
   await evalua("window.__visor.saltarVuelo()");
-  const dIsoEsc = await evalua("window.__visor.distancia()");
+  const otro = await evalua("window.__visor.pantallaDeBien('LH-EQP-064')");
+  const bajo = await evalua(`(() => { const e = document.elementFromPoint(${otro.x}, ${otro.y}); return e ? e.tagName + '.' + e.className : 'nada'; })()`);
+  await toque(otro.x, otro.y);
+  const selOtro = await evalua("JSON.stringify(window.__visor?.seleccion?.() ?? null)");
+  const cambio = await hasta("location.search.includes('LH-EQP-064') && window.__visor?.codigo === 'LH-EQP-064'", 20000);
+  if (!cambio) console.log("diagnóstico tocar otro:", JSON.stringify(otro), bajo, selOtro);
+  await evalua("window.__visor.saltarVuelo()");
+  const cabeza = await evalua("document.querySelector('.visor-titulo h1')?.textContent");
+  caso("Tocar otro equipo lo selecciona: cambia la cabecera y la marca", cambio && cabeza === bienes.find((b) => b.Codigo_LH === "LH-EQP-064").Nombre, cabeza);
+  await espera(1500);
+  await captura("10b_tocar_otro_equipo_escritorio.png");
+  await evalua("window.__visor.vista('general')");
+  await evalua("window.__visor.saltarVuelo()");
+  const dGen = await evalua("window.__visor.distancia()");
   const ocEsc = await evalua("window.__visor.ocupacion()");
-  caso("El isométrico en escritorio queda cerca y llena la zona libre (antes, 68 m)", dIsoEsc < 40 && ocEsc >= 0.85 && ocEsc <= 1.15, `${dIsoEsc.toFixed(1)} m; ocupa ${Math.round(ocEsc * 100)} %`);
+  caso("«General» en escritorio queda cerca y llena la zona libre (antes, 68 m)", dGen < 40 && ocEsc >= 0.85 && ocEsc <= 1.15, `${dGen.toFixed(1)} m; ocupa ${Math.round(ocEsc * 100)} %`);
   caso("En escritorio el cubo no queda bajo el panel del equipo", await evalua("(() => { const a = document.querySelector('.visor-cubo').getBoundingClientRect(); const b = document.querySelector('#visor-hoja').getBoundingClientRect(); return a.top >= b.bottom || a.bottom <= b.top || a.left >= b.right || a.right <= b.left; })()"));
   await espera(500);
-  await captura("11_isometrico_escritorio.png");
-  await evalua("window.__visor.vista('frontal')");
+  await captura("11_general_escritorio.png");
+  await evalua("window.__visor.vista('planta')");
   await evalua("window.__visor.saltarVuelo()");
   await espera(500);
-  await captura("12_frontal_escritorio.png");
-  await evalua("document.querySelector('[data-accion=vistas]').click()");
+  await captura("12_planta_escritorio.png");
+  // Con el mouse, «Vista» se abre solo al pasar por encima
+  const bv = await evalua("(() => { const r = document.querySelector('[data-menu=vista]').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()");
+  await cdp("Input.dispatchMouseEvent", { type: "mouseMoved", x: bv.x, y: bv.y });
   await espera(300);
-  caso("En escritorio el menú se abre dentro del visor", await evalua("(() => { const m = document.querySelector('.visor-vistas').getBoundingClientRect(); const v = document.querySelector('#visor').getBoundingClientRect(); return m.left >= v.left && m.right <= v.right && m.top >= v.top && m.bottom <= v.bottom; })()"));
-  await captura("13_menu_vistas_escritorio.png");
+  caso("En escritorio «Vista» se abre al pasar el mouse", await evalua("!document.querySelector('.visor-menu-vista').hidden"));
+  caso("El menú sale encima del botón, dentro del visor", await evalua("(() => { const m = document.querySelector('.visor-menu-vista').getBoundingClientRect(); const b = document.querySelector('[data-menu=vista]').getBoundingClientRect(); const v = document.querySelector('#visor').getBoundingClientRect(); return m.bottom <= b.top && m.left >= v.left && m.right <= v.right && m.top >= v.top; })()"));
+  await captura("13_menu_vista_escritorio.png");
+  await cdp("Input.dispatchMouseEvent", { type: "mouseMoved", x: 683, y: 300 });
+  await espera(600);
+  caso("Y se cierra al salir", await evalua("document.querySelector('.visor-menu-vista').hidden"));
+  const bc = await evalua("(() => { const r = document.querySelector('[data-menu=corte]').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()");
+  await cdp("Input.dispatchMouseEvent", { type: "mouseMoved", x: bc.x, y: bc.y });
+  await espera(300);
+  caso("En escritorio «Corte» se abre al pasar el mouse", await evalua("!document.querySelector('.visor-menu-corte').hidden"));
+  await captura("13b_menu_corte_escritorio.png");
+  await cdp("Input.dispatchMouseEvent", { type: "mouseMoved", x: 683, y: 300 });
+  await espera(600);
+
+  // n.° 6: buscador de la barra superior dentro del Mapa 3D
+  await ir(`${BASE}?ver=mapa&prueba=1`, 300);
+  await hasta("window.__visor?.ms > 0", 30000);
+  await evalua(`(() => { const q = document.querySelector('#q-barra'); q.focus(); q.value = 'cavitacion'; q.dispatchEvent(new Event('input')); })()`);
+  await espera(200);
+  const rb = await evalua("(() => { const l = document.querySelector('#barra-resultados'); return { ver: !l.hidden, texto: l.innerText, href: l.querySelector('a')?.getAttribute('href') }; })()");
+  caso("En el Mapa 3D, el buscador de arriba muestra resultados ahí mismo", rb.ver && rb.texto.includes("cavitación") && rb.href?.includes("ver=3d"), rb.href);
+  await captura("14_buscador_mapa.png");
+  await evalua("document.querySelector('#barra-resultados a').click()");
+  caso("Elegir un resultado lleva directo al equipo en el 3D", await hasta("location.search.includes('LH-EQP-109') && location.search.includes('ver=3d') && window.__visor?.codigo === 'LH-EQP-109'", 20000));
+
+  // n.° 7: filtro Mobiliario
+  await ir(BASE, 900);
+  await hasta("!!document.querySelector('[data-tipo=MOB]')", 5000);
+  await evalua("document.querySelector('[data-tipo=MOB]').click()");
+  await espera(300);
+  const nMob = bienes.filter((b) => b.Codigo_LH.startsWith("LH-MOB-")).length;
+  const conteoMob = await evalua("document.querySelector('#conteo').textContent");
+  caso("El filtro «Mobiliario» lista los muebles", conteoMob === `${nMob} bienes`, `${conteoMob} (esperado ${nMob})`);
+  await captura("15_mobiliario.png");
+  await evalua("document.querySelector('[data-tipo=\"\"]').click()");
+
+  // n.° 8: el equipo en 3D junto a su foto
+  await ir(`${BASE}?id=LH-EQP-065&prueba=1`, 900);
+  caso("La ficha muestra el equipo en 3D junto a la foto", await hasta("window.__mini?.codigo === 'LH-EQP-065' && !document.querySelector('.heroe-3d').hidden && window.__mini.info().tris > 0", 20000), JSON.stringify(await evalua("window.__mini?.info?.()")));
+  await espera(800);
+  await captura("16_ficha_3d_escritorio.png");
+  await ir(`${BASE}?id=LH-EQP-087&prueba=1`, 900);
+  await hasta("document.querySelector('.codigo')?.textContent === 'LH-EQP-087'", 5000);
+  await espera(800);
+  caso("Un equipo sin modelo propio no muestra el 3D", await evalua("document.querySelector('.heroe-3d')?.hidden === true"));
+  // n.° 9: Inspection Tag
+  caso("Un equipo ESSOM sin foto de la placa dice «Inspection Tag pendiente»", await evalua("document.querySelector('.placa-acciones').innerText.includes('Inspection Tag pendiente')"));
+  actualizacionesSimuladas = { version: 1, cambios: [{ id: "20261119T1200-tag1", codigo: "LH-EQP-087", campo: "Inspection_tag", antes: "", valor: "fotos/LH-EQP-087.webp", fecha: "2026-11-19T12:00:00.000Z", autor: "DU", motivo: "Prueba" }] };
+  await ir(`${BASE}?id=LH-EQP-087&prueba=1`, 900);
+  await hasta("!!document.querySelector('[data-tag]')", 5000);
+  await evalua("document.querySelector('[data-tag]').click()");
+  await espera(400);
+  caso("«Abrir Inspection Tag» muestra la foto de la placa", await evalua("(() => { const d = document.querySelector('.tag-dialogo'); return !!d?.open && d.querySelector('img').getAttribute('src').endsWith('LH-EQP-087.webp'); })()"));
+  await captura("17_inspection_tag.png");
+  await evalua("document.querySelector('.tag-dialogo [data-cerrar]').click()");
+  actualizacionesSimuladas = null;
+  // Celular: el 3D de la ficha espera un toque
+  await cdp("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+  await ir(`${BASE}?id=LH-EQP-065&prueba=1`, 900);
+  caso("En celular el 3D de la ficha se carga al tocar (cuida los datos)", await hasta("!!document.querySelector('.heroe-3d-boton')", 8000));
+  await evalua("document.querySelector('.heroe-3d-boton').click()");
+  caso("Y al tocarlo aparece el equipo", await hasta("window.__mini?.codigo === 'LH-EQP-065' && window.__mini.info().tris > 0", 20000));
+  await espera(800);
+  await captura("18_ficha_3d_celular.png");
   caso("Sin errores en la consola", consola.length === 0, consola.slice(0, 5).join(" | "));
 } catch (e) {
   caso("La prueba terminó sin excepción", false, String(e?.message ?? e));

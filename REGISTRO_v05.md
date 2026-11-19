@@ -88,3 +88,23 @@ Diego señaló que faltaban los cambios del visor y otros que había pedido. Se 
 - Alta probada de punta a punta sobre una copia del Excel: validación con 9 casos, sitio, `sincronizar_excel.py --aplicar` y `excel_a_json.py`.
 
 **Todavía no probado:** el Mapa 3D en un celular real. En Chrome sin ventana el 3D se dibuja por software y tarda 8,8 s con 4G, así que esa medida no sirve para un teléfono.
+
+## 7. Correcciones del 14/11/2026 (PDF «CORRECIONES PORTAL 14-11-2026», aplicadas el 19/11)
+
+El PDF se hizo sobre una versión anterior (v03/v04). Se aplicaron sus ideas sobre la v05b:
+
+| # | Corrección | Qué se hizo |
+|---|---|---|
+| 1 | Al tocar otro equipo en el 3D solo cambiaba el cuadro de la derecha | Tocar otro equipo lo selecciona de verdad: cambian la cabecera y la marca amarilla, y la cámara vuela a él. **Además había un error:** si el rayo cruzaba la caja del equipo buscado, este ganaba aunque estuviera detrás, y no se podía elegir el de al lado. Ahora gana el más cercano |
+| 2 | «Ver mapa 3D» y «General» muy lejos | General es un isométrico cercano desde afuera, desde la esquina que mira a los equipos. Llena la zona libre del visor: 87 a 93 %, a unos 30 m en escritorio |
+| 3 | «Planta» pasa a «Vista», con menú al pasar el mouse: Planta, Derecha, Izquierda, Atrás, Frontal; sin tapar el modelo | Hecho. Botones chicos apilados sobre el botón; en celular, al costado de la barra. Ocupan menos del 8 % del visor. Cada vista encuadra cerca y alineada al edificio. «General» vuelve a la barra |
+| 4 | «Corte»: no hacer nada al tocar; menú con altura en metros y «Por defecto» a 2,2 m | Hecho. Además: «Quitar el corte», y se rechazan alturas fuera de 0,3 a 8 m. La altura por defecto del índice pasó de 1,8 a 2,2 m |
+| 5 | Interruptor estructura en colores / transparente | Interruptor «Colores de la estructura»: en celular bajo el cubo, en escritorio encima del cubo |
+| 6 | Buscar dentro del Mapa 3D con el buscador de arriba | Los resultados salen debajo del buscador. En el 3D, elegir uno lleva al equipo en el 3D; Enter va al primero |
+| 7 | Opción «Mobiliario» | Filtro nuevo (código LH-MOB, 15 bienes). En escritorio los filtros pasan a dos filas si no entran |
+| 8 | Isométrico 3D del equipo junto a la foto, para girarlo y moverlo | Hecho para los equipos con modelo propio (hoy 4). En computadora carga solo; en celular, al tocar «Ver el equipo en 3D» |
+| 9 | Botón «Abrir Inspection Tag» con la foto de la placa | Botón y ventana con la foto. Campo `Inspection_tag`, que se sube desde el panel, se valida y pasa al Excel (columna nueva). **No hay fotos de las placas** en la carpeta de la tesis: los equipos ESSOM muestran «Inspection Tag pendiente» |
+
+**Pruebas:** `prueba_v05.mjs`, 80 de 80. Se agregaron 23 casos para estas correcciones.
+
+**A tener en cuenta:** la placa ESSOM lleva nombres y firmas del personal del fabricante. Antes de publicarlas, conviene confirmar que se pueden mostrar o taparlos en la foto.
