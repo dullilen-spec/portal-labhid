@@ -4,7 +4,7 @@ Uso:  python scripts/sincronizar_excel.py RUTA\\Maestro_Bienes_LABHID.xlsx [--ap
 - Sin --aplicar solo muestra lo que cambiaría (no toca nada).
 - Con --aplicar:
   1. guarda una copia del Excel con fecha y hora junto al original (no se borra nada);
-  2. escribe los campos en la hoja BIENES y agrega los eventos a INTERVENCIONES;
+  2. escribe los campos en la hoja BIENES, agrega los bienes nuevos (altas) como filas y los eventos a INTERVENCIONES;
   3. pasa los cambios aplicados a portal/public/datos/actualizaciones_AAAA-MM.json (archivo histórico, el sitio no lo lee)
      y deja actualizaciones.json vacío, porque ahora esos datos ya vienen del Excel.
 Después hay que correr excel_a_json.py como siempre para regenerar bienes.json.
@@ -23,6 +23,23 @@ DATOS = os.path.join(RAIZ, "portal", "public", "datos")
 ACT = os.path.join(DATOS, "actualizaciones.json")
 CAMPOS_BIENES = {"Estado_operativo", "Estado_operativo_fuente", "Estado_conservacion", "Estado_metrologico", "Proxima_fecha",
                  "Ultima_OT", "Contenedor", "Ubicacion_texto", "Ubicacion_estado", "Foto"}
+
+
+def fila_alta(x):
+    """Mismos valores que nuevoBien() de portal/src/datos.js: lo que no se pidió queda Pendiente."""
+    v = x["valor"]
+    p = lambda k: (v.get(k) or "").strip() or "Pendiente"
+    return {
+        "Codigo_LH": x["codigo"], "En_muestra": "No", "Foto": "", "Nombre": v["Nombre"].strip(), "Nombre_oficial": "Pendiente",
+        "Marca_modelo": p("Marca_modelo"), "Fabricante": p("Fabricante"), "Serie": p("Serie"), "Tipo_ficha": v.get("Tipo_ficha") or "Sin ficha",
+        "Estrato": "", "Descripcion_uso": p("Descripcion_uso"), "Equipo_padre": "", "Componentes": "",
+        "Contenedor": v.get("Contenedor") or "Pendiente", "Ubicacion_texto": p("Ubicacion_texto"), "Ubicacion_estado": "Por confirmar en campo",
+        "Estado_operativo": v.get("Estado_operativo") or "Pendiente", "Estado_operativo_fuente": f"Alta en el portal ({x['autor']})",
+        "Estado_conservacion": v.get("Estado_conservacion") or "Pendiente", "Funcion_medicion": "Pendiente", "Estado_metrologico": "Pendiente",
+        "Proxima_fecha": "Pendiente", "Verificacion_inicial": "Pendiente", "Plan_mantenimiento": "Pendiente", "Software_firmware": "Pendiente",
+        "Ultima_OT": "Pendiente", "Manual_fabrica": "", "Manual_fabrica_URL": "", "Manual_operacion_URL": "",
+        "V3_pregunta": "Pendiente", "V3_respuesta": "Pendiente", "V3_fuente": "Pendiente",
+    }
 
 
 def main():
@@ -51,7 +68,21 @@ def main():
     print(f"{len(cambios)} cambio(s) del panel:")
     faltan = []
     for x in cambios:
+        if x["campo"] == "Alta":
+            if x["codigo"] in fila_de:
+                print(f"  {x['codigo']}: ya está en el Excel, el alta no se repite")
+                continue
+            print(f"  {x['codigo']}: bien nuevo, {x['valor']['Nombre']}")
+            if aplicar:
+                f = fila_alta(x)
+                hb.append([f.get(c, "") for c in cab])
+            # Los cambios siguientes de este bien van a su fila nueva (o se muestran en la revisión)
+            fila_de[x["codigo"]] = hb.max_row if aplicar else -1
+            continue
         r = fila_de.get(x["codigo"])
+        if r == -1:
+            print(f"  {x['codigo']}: {x['campo']} -> {x['valor']!r} (bien nuevo)")
+            continue
         if r is None:
             faltan.append(x["codigo"])
             continue

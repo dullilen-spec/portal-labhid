@@ -1,6 +1,6 @@
 // Modo sin conexión: guarda lo que ya se visitó. Primero intenta la red para no mostrar
 // un estado viejo mientras haya señal; sin señal responde con lo guardado.
-const CACHE = "labhid-v9-v05"; // v05: panel, novedades y modelo v06; obliga a renovar lo guardado
+const CACHE = "labhid-v10-v05b"; // v05: panel, novedades y modelo v06; obliga a renovar lo guardado
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => {

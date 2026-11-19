@@ -25,6 +25,8 @@ let indice = null;
 let inversos = null;
 // Un solo renderizador: la geometría subida a la tarjeta gráfica no se puede pasar a otro
 let renderer = null;
+// v05b: posición de la cámara al cerrar el visor, para pasar de un equipo a otro sin volver a la vista general
+let camaraPrevia = null;
 
 async function descargar(url, alProgreso) {
   const r = await fetch(url);
@@ -191,12 +193,55 @@ export async function abrirVisor(caja, bien, bienesPorCodigo, cb) {
     }
   };
 
+  // v05b: cubo de vistas dentro del anillo de la brújula. Gira con la cámara según los ejes del edificio
+  // (no los de la pantalla) y cada cara lleva a su vista
+  const cuboCaja = caja.querySelector(".visor-cubo");
+  const cubo = cuboCaja?.querySelector(".cubo");
+  let ejesCubo = null;
+  let giroCubo = "";
+  const dirCam = new THREE.Vector3();
+  const moverCubo = () => {
+    if (!cubo || !ejesCubo) return;
+    dirCam.copy(camara.position).sub(controles.target).normalize();
+    const th = THREE.MathUtils.radToDeg(Math.atan2(dirCam.dot(ejesCubo.derecha), dirCam.dot(ejesCubo.frente)));
+    const ph = THREE.MathUtils.radToDeg(Math.asin(THREE.MathUtils.clamp(dirCam.y, -1, 1)));
+    const t = `rotateX(${(-ph).toFixed(1)}deg) rotateY(${(-th).toFixed(1)}deg)`;
+    if (t !== giroCubo) {
+      giroCubo = t;
+      cubo.style.transform = t;
+    }
+  };
+
+  // v05b: menú «Vistas» de la barra. Va fuera de la barra porque ella tiene desplazamiento propio y lo recortaría
+  const menu = caja.querySelector(".visor-vistas");
+  const cerrarMenu = () => {
+    if (!menu || menu.hidden) return;
+    menu.hidden = true;
+    caja.querySelector('[data-accion="vistas"]')?.setAttribute("aria-expanded", "false");
+  };
+  const alternarMenu = (boton) => {
+    if (!menu) return;
+    if (!menu.hidden) return cerrarMenu();
+    menu.hidden = false;
+    boton?.setAttribute("aria-expanded", "true");
+    const rc = caja.getBoundingClientRect();
+    const rb = (boton ?? caja).getBoundingClientRect();
+    const vertical = rb.left - rc.left > rc.width * 0.6;
+    // Barra vertical a la derecha: el menú se abre a su izquierda. Barra horizontal abajo: se abre encima
+    menu.style.left = vertical ? "auto" : `${Math.max(8, Math.min(rb.left - rc.left, rc.width - menu.offsetWidth - 8))}px`;
+    menu.style.right = vertical ? `${rc.right - rb.left + 8}px` : "auto";
+    menu.style.top = vertical ? `${Math.max(8, Math.min(rb.top - rc.top, rc.height - menu.offsetHeight - 8))}px` : "auto";
+    menu.style.bottom = vertical ? "auto" : `${rc.bottom - rb.top + 8}px`;
+    menu.querySelector("button")?.focus({ preventScroll: true });
+  };
+
   const dibujar = () => {
     controles.update();
     renderer.render(escena, camara);
     moverPin();
     moverEtiquetas?.();
     moverBrujula();
+    moverCubo();
   };
   const bucle = () => {
     if (!vivo) return;
@@ -227,6 +272,11 @@ export async function abrirVisor(caja, bien, bienesPorCodigo, cb) {
     }
   };
 
+  let tocado = false;
+  controles.addEventListener("start", () => {
+    tocado = true;
+    vuelo = null;
+  });
   controles.addEventListener("change", () => {
     motor.update();
     avisar();
@@ -302,40 +352,184 @@ export async function abrirVisor(caja, bien, bienesPorCodigo, cb) {
     };
     avisar();
   };
-  // Distancia mínima a la que los 8 vértices de la caja entran en pantalla, dejando sitio a los controles
-  const distanciaExacta = (b, dir, margen = 1.08) => {
-    const centro = b.getCenter(new THREE.Vector3());
+  const esquinas = (b) => {
+    const r = [];
+    for (const x of [b.min.x, b.max.x]) for (const y of [b.min.y, b.max.y]) for (const z of [b.min.z, b.max.z]) r.push(new THREE.Vector3(x, y, z));
+    return r;
+  };
+
+  // v05b: en el visor el local está girado unos 41° (norte del sitio). La caja alineada a la pantalla salía
+  // mucho más grande que el local y el isométrico quedaba lejos. Los ejes propios del edificio salen de las
+  // columnas (el rectángulo de menor área que las contiene) y el frente es el lado del muro cortina
+  const edificio = await (async () => {
+    const cols = await ids(indice.columnas ?? []);
+    const centros = [];
+    for (const id of cols) centros.push((await modelo.getMergedBox([id])).getCenter(new THREE.Vector3()));
+    let A = new THREE.Vector3(1, 0, 0);
+    let B = new THREE.Vector3(0, 0, 1);
+    let lim = null;
+    if (centros.length >= 3) {
+      for (let g = 0; g < 90; g += 0.25) {
+        const a = THREE.MathUtils.degToRad(g);
+        const ea = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
+        const eb = new THREE.Vector3(-Math.sin(a), 0, Math.cos(a));
+        const l = [Infinity, -Infinity, Infinity, -Infinity];
+        for (const p of centros) {
+          const u = p.dot(ea);
+          const w = p.dot(eb);
+          l[0] = Math.min(l[0], u);
+          l[1] = Math.max(l[1], u);
+          l[2] = Math.min(l[2], w);
+          l[3] = Math.max(l[3], w);
+        }
+        const area = (l[1] - l[0]) * (l[3] - l[2]);
+        if (!lim || area < lim.area - 1e-6) lim = { area, l, ea, eb };
+      }
+      A = lim.ea;
+      B = lim.eb;
+    }
+    // Sin columnas, el rectángulo es la caja del edificio alineada a la pantalla
+    const l = lim ? lim.l : [cajaTotal.min.x, cajaTotal.max.x, cajaTotal.min.z, cajaTotal.max.z];
+    const borde = lim ? 0.3 : 0; // media columna y el espesor del muro por fuera del eje
+    const hA = (l[1] - l[0]) / 2 + borde;
+    const hB = (l[3] - l[2]) / 2 + borde;
+    const centro = A.clone().multiplyScalar((l[0] + l[1]) / 2).addScaledVector(B, (l[2] + l[3]) / 2).setY((cajaTotal.min.y + cajaTotal.max.y) / 2);
+    const puntos = [];
+    for (const sa of [-1, 1]) for (const sb of [-1, 1]) for (const y of [cajaTotal.min.y, cajaTotal.max.y]) puntos.push(centro.clone().addScaledVector(A, sa * hA).addScaledVector(B, sb * hB).setY(y));
+    let frente = B.clone();
+    const idsFachada = await ids(indice.fachada ?? []);
+    if (idsFachada.length) {
+      const f = (await modelo.getMergedBox(idsFachada)).getCenter(new THREE.Vector3()).sub(centro).setY(0);
+      const ua = f.dot(A) / hA;
+      const ub = f.dot(B) / hB;
+      frente = Math.abs(ua) > Math.abs(ub) ? A.clone().multiplyScalar(Math.sign(ua)) : B.clone().multiplyScalar(Math.sign(ub));
+    }
+    // Derecha de quien mira la fachada frontal desde afuera
+    const derecha = new THREE.Vector3().crossVectors(frente.clone().negate(), ARRIBA).normalize();
+    return { centro, puntos, frente, derecha, largo: 2 * hA, ancho: 2 * hB, conColumnas: !!lim };
+  })();
+
+  // v05b: parte del visor que no tapan los paneles (zonas, cabecera, barra y hoja), en coordenadas de pantalla
+  // de -1 a 1. Antes el encuadre usaba márgenes fijos y el edificio quedaba chico y descentrado
+  const zonaLibre = () => {
+    const rc = caja.getBoundingClientRect();
+    if (!rc.width || !rc.height) return { x0: -0.96, x1: 0.96, y0: -0.72, y1: 0.9 };
+    let [izq, der, arr, aba] = [rc.left + 10, rc.right - 10, rc.top + 10, rc.bottom - 10];
+    const ve = (el) => el && !el.hidden && getComputedStyle(el).display !== "none" && el.getBoundingClientRect().width > 0;
+    const zonas = document.getElementById("visor-zonas");
+    if (ve(zonas)) {
+      const r = zonas.getBoundingClientRect();
+      if (r.right < rc.left + rc.width * 0.45) izq = Math.max(izq, r.right + 10);
+    }
+    const cabeza = document.querySelector(".visor-cabeza");
+    if (ve(cabeza)) {
+      const r = cabeza.getBoundingClientRect();
+      if (r.width > rc.width * 0.5) arr = Math.max(arr, r.bottom + 10);
+    }
+    const barra = caja.querySelector(".visor-barra");
+    if (ve(barra)) {
+      const r = barra.getBoundingClientRect();
+      if (r.width > r.height) aba = Math.min(aba, r.top - 10);
+      else der = Math.min(der, r.left - 10);
+    }
+    const hojaEq = document.getElementById("visor-hoja");
+    if (ve(hojaEq)) {
+      const r = hojaEq.getBoundingClientRect();
+      if (r.width > rc.width * 0.6 && r.top > rc.top + rc.height * 0.4) aba = Math.min(aba, r.top - 10);
+    }
+    // Si los paneles dejan muy poco, se usa todo el visor
+    if (der - izq < rc.width * 0.35) [izq, der] = [rc.left + 10, rc.right - 10];
+    if (aba - arr < rc.height * 0.35) [arr, aba] = [rc.top + 10, rc.bottom - 10];
+    const nx = (px) => ((px - rc.left) / rc.width) * 2 - 1;
+    const ny = (py) => -(((py - rc.top) / rc.height) * 2 - 1);
+    return { x0: nx(izq), x1: nx(der), y0: ny(aba), y1: ny(arr) };
+  };
+
+  // Distancia y punto de mira para que los puntos llenen la zona libre, centrados en ella
+  const ajustar = (centro, puntos, dir, margen = 1.05) => {
+    const z = zonaLibre();
     const d = dir.clone().normalize();
     const aux = camara.clone();
-    let lo = 0.05;
-    let hi = distanciaPara(b) * 2;
     const q = new THREE.Vector3();
-    for (let i = 0; i < 14; i++) {
-      const m = (lo + hi) / 2;
+    const medir = (m) => {
       aux.position.copy(centro).addScaledVector(d, m);
       aux.lookAt(centro);
       aux.updateMatrixWorld();
-      let dentro = true;
-      for (const x of [b.min.x, b.max.x]) for (const y of [b.min.y, b.max.y]) for (const z of [b.min.z, b.max.z]) {
-        q.set(x, y, z).project(aux);
-        if (Math.abs(q.x) > 0.96 || q.y > 0.9 || q.y < -0.72 || q.z > 1) dentro = false;
+      const a = [Infinity, -Infinity, Infinity, -Infinity];
+      let detras = false;
+      for (const p of puntos) {
+        q.copy(p).project(aux);
+        if (q.z > 1) detras = true;
+        a[0] = Math.min(a[0], q.x);
+        a[1] = Math.max(a[1], q.x);
+        a[2] = Math.min(a[2], q.y);
+        a[3] = Math.max(a[3], q.y);
       }
-      if (dentro) hi = m;
+      return { a, detras };
+    };
+    const radio = Math.max(0.05, ...puntos.map((p) => p.distanceTo(centro)));
+    let lo = radio * 0.2;
+    let hi = radio * 40;
+    for (let i = 0; i < 22; i++) {
+      const m = (lo + hi) / 2;
+      const { a, detras } = medir(m);
+      if (!detras && a[1] - a[0] <= z.x1 - z.x0 && a[3] - a[2] <= z.y1 - z.y0) hi = m;
       else lo = m;
     }
-    return hi * margen;
+    const dist = hi * margen;
+    const { a } = medir(dist);
+    const tanV = Math.tan(THREE.MathUtils.degToRad(camara.fov / 2));
+    const sx = (a[0] + a[1]) / 2 - (z.x0 + z.x1) / 2;
+    const sy = (a[2] + a[3]) / 2 - (z.y0 + z.y1) / 2;
+    const objetivo = centro.clone()
+      .addScaledVector(new THREE.Vector3(1, 0, 0).applyQuaternion(aux.quaternion), sx * dist * tanV * camara.aspect)
+      .addScaledVector(new THREE.Vector3(0, 1, 0).applyQuaternion(aux.quaternion), sy * dist * tanV);
+    return { objetivo, dist };
   };
+  const volarA = (centro, puntos, dir, dur, margen) => {
+    const r = ajustar(centro, puntos, dir, margen);
+    volar(r.objetivo, r.dist, dir, dur);
+  };
+  const volarEdificio = (dir, dur) => volarA(edificio.centro, edificio.puntos, dir, dur);
+  ejesCubo = edificio;
+  if (cuboCaja) cuboCaja.hidden = false;
+
   // v02: la vista general mira hacia los equipos desde el interior del local, para que los muros no los tapen
   const guidsBienes = Object.values(indice.bienes).flat();
   const cajaBienes = guidsBienes.length ? await modelo.getMergedBox(await ids(guidsBienes)) : null;
-  const haciaDentro = cajaBienes ? centroTotal.clone().sub(cajaBienes.getCenter(new THREE.Vector3())).setY(0) : null;
+  const haciaDentro = cajaBienes ? edificio.centro.clone().sub(cajaBienes.getCenter(new THREE.Vector3())).setY(0) : null;
   const dirGeneral = haciaDentro && haciaDentro.length() > 0.5 && !indice.simulado
     ? haciaDentro.normalize().multiplyScalar(0.78).add(new THREE.Vector3(0, 1.05, 0))
     : new THREE.Vector3(0.3, 1.05, 0.72);
-  const vistaGeneral = (dur) => volar(centroTotal, distanciaExacta(cajaTotal, dirGeneral), dirGeneral, dur);
+  const vistaGeneral = (dur) => volarEdificio(dirGeneral, dur);
 
-  camara.position.copy(centroTotal).addScaledVector(dirGeneral.clone().normalize(), distanciaExacta(cajaTotal, dirGeneral));
-  controles.target.copy(centroTotal);
+  // v05b: vistas del edificio (pedido de Diego del 15/11): frontal, posterior, laterales, isométrico y planta
+  const ELEVACION = 0.14; // unos 8°: mirar casi horizontal sin que el control de órbita lo impida
+  const dirVista = (nombre) => {
+    const { frente, derecha } = edificio;
+    const h = {
+      frontal: frente,
+      posterior: frente.clone().negate(),
+      izquierda: derecha.clone().negate(),
+      derecha,
+      isometrico: frente.clone().add(derecha).normalize(),
+    }[nombre];
+    if (!h) return null;
+    // El isométrico mira desde unos 35° de altura, como en Revit
+    return h.clone().setY(nombre === "isometrico" ? 0.72 : ELEVACION);
+  };
+
+  // v05b: si se llega desde otro equipo del mismo visor, la cámara sigue desde donde estaba
+  const sigue = camaraPrevia && performance.now() - camaraPrevia.t < 5000;
+  if (sigue) {
+    camara.position.copy(camaraPrevia.pos);
+    controles.target.copy(camaraPrevia.obj);
+  } else {
+    const r0 = ajustar(edificio.centro, edificio.puntos, dirGeneral);
+    camara.position.copy(r0.objetivo).addScaledVector(dirGeneral.clone().normalize(), r0.dist);
+    controles.target.copy(r0.objetivo);
+  }
+  camaraPrevia = null;
   controles.update();
   await motor.update(true);
   avisar(1500);
@@ -456,7 +650,9 @@ export async function abrirVisor(caja, bien, bienesPorCodigo, cb) {
     await motor.update(true);
     // Primero se ve el local entero y luego se llega al bien: así se entiende dónde está
     await cargarCajas();
-    setTimeout(() => vivo && !aislado && irAlFoco(1.5), SIN_MOVIMIENTO ? 0 : 350);
+    // Si se llegó desde otro equipo, se vuela directo sin la pausa en la vista general
+    // Si la persona ya movió la cámara o eligió una vista, no se le quita el control
+    setTimeout(() => vivo && !aislado && !tocado && irAlFoco(sigue ? 1 : 1.5), SIN_MOVIMIENTO || sigue ? 0 : 350);
     // Pasado el resalte, el equipo recupera sus colores y el marco lo sigue indicando
     setTimeout(async () => {
       if (!vivo || aislado) return;
@@ -531,10 +727,21 @@ export async function abrirVisor(caja, bien, bienesPorCodigo, cb) {
     foco: () => irAlFoco(0.9),
     general: () => vistaGeneral(0.9),
     planta: () => {
-      const c = cajaFoco ? cajaFoco.getCenter(new THREE.Vector3()) : centroTotal;
-      // Con norte conocido, la planta se ve con el norte hacia arriba (la cámara queda apenas al sur)
-      const arriba = norte ? new THREE.Vector3(0, 1, 0).addScaledVector(norte, -0.002) : new THREE.Vector3(0, 1, 0.002);
-      volar(c, cajaFoco ? Math.max(distanciaPara(contexto) * 1.6, 5) : distanciaExacta(cajaTotal, arriba), arriba, 0.9);
+      const c = cajaFoco ? cajaFoco.getCenter(new THREE.Vector3()) : edificio.centro;
+      // v05b: como en los planos de Revit, la planta va alineada al edificio con la fachada frontal abajo
+      // (la cámara queda apenas hacia el frente); la brújula sigue marcando el norte real
+      const arriba = new THREE.Vector3(0, 1, 0).addScaledVector(edificio.frente, 0.002);
+      if (cajaFoco) volar(c, Math.max(distanciaPara(contexto) * 1.6, 5), arriba, 0.9);
+      else volarEdificio(arriba, 0.9);
+    },
+    vistas: (boton) => alternarMenu(boton),
+    vista: (nombre) => {
+      tocado = true;
+      cerrarMenu();
+      if (nombre === "general") return vistaGeneral(0.9);
+      if (nombre === "planta") return acciones.planta();
+      const dir = dirVista(nombre);
+      if (dir) volarEdificio(dir, 0.9);
     },
     muros: async (boton) => {
       mostrarMuros = !mostrarMuros;
@@ -560,7 +767,7 @@ export async function abrirVisor(caja, bien, bienesPorCodigo, cb) {
           b.expandByScalar(0.6);
           b.max.y = Math.min(b.max.y, planoCorte.constant);
           const dir = dirGeneral.clone().setY(0).normalize().multiplyScalar(0.85).add(new THREE.Vector3(0, 0.8, 0));
-          volar(b.getCenter(new THREE.Vector3()), distanciaExacta(b, dir), dir, 0.8);
+          volarA(b.getCenter(new THREE.Vector3()), esquinas(b), dir, 0.8);
         } else vistaGeneral(0.8);
       }
       await motor.update(true);
@@ -584,7 +791,7 @@ export async function abrirVisor(caja, bien, bienesPorCodigo, cb) {
         suelo.visible = false;
         const b = await modelo.getMergedBox(sel);
         const dir = camara.position.clone().sub(controles.target);
-        volar(b.getCenter(new THREE.Vector3()), distanciaExacta(b, dir, 1.15), dir, 0.7);
+        volarA(b.getCenter(new THREE.Vector3()), esquinas(b), dir, 0.7, 1.15);
       } else {
         await modelo.setVisible(visibles, true);
         if (idsOcultar.length) await modelo.setVisible(idsOcultar, false);
@@ -606,8 +813,11 @@ export async function abrirVisor(caja, bien, bienesPorCodigo, cb) {
     },
   };
   const alBoton = (e) => {
+    const v = e.target.closest("[data-vista]");
+    if (v) return acciones.vista(v.dataset.vista);
     const b = e.target.closest("[data-accion]");
     if (b) acciones[b.dataset.accion]?.(b);
+    else cerrarMenu();
   };
   caja.addEventListener("click", alBoton);
 
@@ -672,7 +882,8 @@ export async function abrirVisor(caja, bien, bienesPorCodigo, cb) {
     const enRayo = await bienEnRayo(e);
     // Si se tocó un mueble, solo gana un bien que esté justo ahí, no uno lejano en la misma línea
     const codigo = (enRayo && (!cont || enRayo.d - r.distance < 0.35) ? enRayo.codigo : null) ?? inversos.bien.get(guid);
-    if (!codigo && !cont) return quitarSeleccion();
+    // v05b: tocar un espacio vacío ya no suelta el equipo; se cierra con la X de la hoja o con Esc
+    if (!codigo && !cont) return;
     const lista = codigo ? indice.bienes[codigo] : indice.contenedores[cont];
     seleccion.box.copy(await modelo.getMergedBox(await ids(lista))).expandByScalar(0.01);
     seleccion.visible = true;
@@ -690,7 +901,10 @@ export async function abrirVisor(caja, bien, bienesPorCodigo, cb) {
     const giro = { ArrowLeft: -0.14, ArrowRight: 0.14 }[e.key];
     const alto = { ArrowUp: -0.1, ArrowDown: 0.1 }[e.key];
     const zoom = { "+": 0.85, "=": 0.85, "-": 1.18 }[e.key];
-    if (e.key === "Escape") return quitarSeleccion();
+    if (e.key === "Escape") {
+      if (!menu?.hidden) return cerrarMenu();
+      return quitarSeleccion();
+    }
     if (giro === undefined && alto === undefined && zoom === undefined) return;
     e.preventDefault();
     vuelo = null;
@@ -719,7 +933,7 @@ export async function abrirVisor(caja, bien, bienesPorCodigo, cb) {
   renderer.domElement.addEventListener("pointerup", alSubir);
 
   const real = bien && indice.geometria_real?.includes(objetivo.codigo);
-  cb.alListo({ tipo: objetivo.tipo, codigo: objetivo.codigo, simulado: indice.simulado, geometriaReal: !indice.simulado || !!real });
+  cb.alListo({ tipo: objetivo.tipo, codigo: objetivo.codigo, simulado: indice.simulado, geometriaReal: !indice.simulado || !!real, conModelo: Object.keys(indice.bienes) });
 
   if (EN_PRUEBA) {
     window.__visor = {
@@ -742,6 +956,27 @@ export async function abrirVisor(caja, bien, bienesPorCodigo, cb) {
         }
       },
       accion: (a) => acciones[a]?.(caja.querySelector(`[data-accion="${a}"]`)),
+      vista: (n) => acciones.vista(n),
+      alturas: async () => {
+        const piso = await ids(indice.corte?.piso_base ?? []);
+        return { cajaMin: cajaTotal.min.y, cajaMax: cajaTotal.max.y, piso: piso.length ? (await modelo.getMergedBox(piso)).max.y : null };
+      },
+      edificio: () => ({ largo: +edificio.largo.toFixed(2), ancho: +edificio.ancho.toFixed(2), conColumnas: edificio.conColumnas, frente: edificio.frente.toArray(), derecha: edificio.derecha.toArray(), centro: edificio.centro.toArray() }),
+      cubo: () => cubo?.style.transform ?? null,
+      distancia: () => camara.position.distanceTo(controles.target),
+      // Fracción de la zona libre que ocupa el edificio (1 = la llena en ancho o en alto)
+      ocupacion: () => {
+        const z = zonaLibre();
+        const a = [Infinity, -Infinity, Infinity, -Infinity];
+        for (const p of edificio.puntos) {
+          v.copy(p).project(camara);
+          a[0] = Math.min(a[0], v.x);
+          a[1] = Math.max(a[1], v.x);
+          a[2] = Math.min(a[2], v.y);
+          a[3] = Math.max(a[3], v.y);
+        }
+        return +Math.max((a[1] - a[0]) / (z.x1 - z.x0), (a[3] - a[2]) / (z.y1 - z.y0)).toFixed(2);
+      },
       pantallaDe: () => {
         v.copy(cajaFoco ? cajaFoco.getCenter(new THREE.Vector3()) : centroTotal).project(camara);
         const r = renderer.domElement.getBoundingClientRect();
@@ -759,8 +994,10 @@ export async function abrirVisor(caja, bien, bienesPorCodigo, cb) {
     };
   }
 
-  return () => {
+  const cerrar = () => {
     vivo = false;
+    camaraPrevia = { pos: camara.position.clone(), obj: controles.target.clone(), t: performance.now() };
+    cerrarMenu();
     renderer.clippingPlanes = [];
     clearInterval(refresco);
     caja.querySelectorAll(".visor-zona").forEach((e) => e.remove());
@@ -776,4 +1013,7 @@ export async function abrirVisor(caja, bien, bienesPorCodigo, cb) {
     renderer.domElement.remove();
     delete window.__visor;
   };
+  // La hoja del equipo (fuera del visor) suelta la selección con su X
+  cerrar.quitarSeleccion = quitarSeleccion;
+  return cerrar;
 }

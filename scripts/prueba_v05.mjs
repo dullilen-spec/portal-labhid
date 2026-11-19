@@ -177,12 +177,29 @@ try {
   caso("Cambiar el mueble actualiza contenedor y ubicación", ub.includes("ARM-01") && ub.some((v) => String(v).includes("Armario 1")), ub.join(" | "));
   caso("El segundo guardado agrega, no reemplaza", subido2.cambios.length === 5, `${subido2.cambios.length} cambios`);
   await captura("2_panel_guardado.png");
+  // v05b: alta de un bien nuevo (pedido del 15/11)
+  await evalua("document.querySelector('#p-nuevo').click()");
+  await espera(200);
+  caso("El alta propone el número siguiente", (await evalua("document.querySelector('#a-codigo').textContent")).endsWith("LH-EQP-142"), await evalua("document.querySelector('#a-codigo').textContent"));
+  await evalua(`(() => { const s = document.querySelector('#a-pref'); s.value = 'MED'; s.dispatchEvent(new Event('change')); })()`);
+  caso("El prefijo cambia el código propuesto", (await evalua("document.querySelector('#a-codigo').textContent")).endsWith("LH-MED-142"));
+  await evalua(`(() => { const f = document.querySelector('#p-form'); f.querySelector('#f-motivo').value = 'Llegó al laboratorio'; f.requestSubmit(); })()`);
+  await espera(300);
+  caso("Un alta sin nombre no se guarda", (await evalua("document.querySelector('#p-aviso').innerText")).includes("nombre"));
+  await evalua(`(() => { const f = document.querySelector('#p-form'); f.querySelector('#a-nombre').value = 'Rotámetro de prueba'; f.querySelector('#a-ficha').value = 'FOR-VDC-09B'; f.querySelector('#a-marca').value = 'Prueba RT-10'; f.querySelector('#a-cont').value = 'ARM-01'; f.querySelector('#a-eo').value = 'Operativo'; f.requestSubmit(); })()`);
+  caso("Un alta válida se guarda con su código", await hasta("document.querySelector('#p-aviso').innerText.startsWith('Agregado: LH-MED-142')", 5000), await evalua("document.querySelector('#p-aviso').innerText"));
+  const subido3 = await evalua("window.__subido['portal/public/datos/actualizaciones.json']");
+  const errs3 = validarArchivo(subido3, codigos, contenedores);
+  const alta = subido3.cambios.find((x) => x.campo === "Alta");
+  caso("El alta pasa la misma revisión que la publicación", !errs3.length && alta?.codigo === "LH-MED-142" && alta.valor.Contenedor === "ARM-01" && alta.valor.Ubicacion_texto.includes("Armario 1"), errs3.join("; ") || JSON.stringify(alta?.valor));
+  caso("Después del alta, el panel abre el bien nuevo para seguir editándolo", await evalua("document.querySelector('.p-bien .t-codigo')?.textContent === 'LH-MED-142'"));
+  await captura("2b_panel_alta.png");
   // Cerrar sesión borra el token
   await evalua("document.querySelector('#p-salir').click()");
   caso("Cerrar sesión borra el token del navegador", (await evalua("localStorage.getItem('labhid-panel')")) === null);
 
   // El sitio aplica las actualizaciones
-  actualizacionesSimuladas = subido2;
+  actualizacionesSimuladas = subido3;
   await ir(`${BASE}?id=LH-EQP-065`, 800);
   await hasta("document.querySelector('.codigo')?.textContent === 'LH-EQP-065'");
   const ficha = await evalua("document.querySelector('.ficha').innerText");
@@ -192,11 +209,15 @@ try {
   await ir(`${BASE}?ver=novedades`, 700);
   const nov = await evalua("document.querySelectorAll('.nov-lista li').length");
   // Estado, bitácora y ubicación; la fuente del estado y el código del mueble van con su cambio
-  caso("Novedades lista los cambios publicados", nov === 3, `${nov} entradas`);
+  caso("Novedades lista los cambios publicados, con el bien nuevo", nov === 4 && (await evalua("document.body.innerText.includes('Rotámetro de prueba, agregado al inventario')")), `${nov} entradas`);
   caso("Novedades no desborda en celular", await evalua("document.documentElement.scrollWidth <= innerWidth"));
   await captura("4_novedades.png");
   await ir(`${BASE}?ver=novedades&id=LH-EQP-065`, 600);
   caso("Novedades se filtra por equipo", (await evalua("document.querySelectorAll('.nov-lista li').length")) === 3 && (await evalua("document.body.innerText.includes('Ver todas')")));
+  await ir(`${BASE}?id=LH-MED-142`, 800);
+  const fichaNueva = await hasta("document.querySelector('.codigo')?.textContent === 'LH-MED-142'", 5000);
+  caso("El bien nuevo tiene ficha propia (para su QR)", fichaNueva && (await evalua("document.querySelector('.ficha').innerText.includes('Rotámetro de prueba') && document.querySelector('.ficha').innerText.includes('Armario 1')")));
+  await captura("3b_ficha_bien_nuevo.png");
   // Un archivo dañado no rompe el sitio
   actualizacionesSimuladas = "{ esto no es json";
   await ir(`${BASE}?id=LH-EQP-065`, 800);
@@ -251,6 +272,84 @@ try {
   await evalua("window.__visor.saltarVuelo()");
   await espera(2400);
   await captura("7_HB015_v06.png");
+
+  // v05b: vistas, cubo, encuadre del isométrico y cambio de equipo (pedidos del 15/11)
+  const ed = await evalua("window.__visor.edificio()");
+  caso("Los ejes del edificio salen de las columnas", ed.conColumnas && ed.largo > 8 && ed.ancho > 8, `${ed.largo} x ${ed.ancho} m`);
+  caso("El cubo de vistas se ve en el celular", await evalua("(() => { const c = document.querySelector('.visor-cubo'); const r = c?.getBoundingClientRect(); return !!c && !c.hidden && r.width > 50 && r.right <= innerWidth; })()"));
+  const nVistas = await evalua("document.querySelectorAll('.visor-vistas [data-vista]').length");
+  caso("El menú «Vistas» tiene frontal, posterior, laterales, isométrico, planta y general", nVistas === 7, `${nVistas} vistas`);
+  await evalua("document.querySelector('[data-accion=vistas]').click()");
+  await espera(300);
+  caso("El menú se abre dentro de la pantalla", await evalua("(() => { const m = document.querySelector('.visor-vistas'); const r = m.getBoundingClientRect(); return !m.hidden && r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight; })()"));
+  await captura("8_menu_vistas_celular.png");
+  await evalua("document.querySelector('.visor-vistas [data-vista=isometrico]').click()");
+  caso("Elegir una vista cierra el menú", await evalua("document.querySelector('.visor-vistas').hidden"));
+  await evalua("window.__visor.saltarVuelo()");
+  // En celular vertical manda el ancho: la distancia sigue siendo grande, lo que importa es que el edificio llene la pantalla
+  const ocCel = await evalua("window.__visor.ocupacion()");
+  caso("El isométrico en celular llena la zona libre", ocCel >= 0.85 && ocCel <= 1.15, `ocupa ${Math.round(ocCel * 100)} % a ${(await evalua("window.__visor.distancia()")).toFixed(1)} m`);
+  await espera(400);
+  await captura("9_isometrico_celular.png");
+  const caras = {};
+  for (const [cara, vista] of [["frente", "frontal"], ["der", "derecha"], ["atras", "posterior"], ["izq", "izquierda"]]) {
+    await evalua(`window.__visor.vista('${vista}')`);
+    await evalua("window.__visor.saltarVuelo()");
+    caras[vista] = await evalua("window.__visor.cubo()");
+  }
+  caso("El cubo gira con cada vista", caras.frontal.includes("rotateY(0deg)") && caras.derecha.includes("rotateY(-90deg)") && /rotateY\(-?180deg\)/.test(caras.posterior) && caras.izquierda.includes("rotateY(90deg)"), JSON.stringify(caras));
+  await evalua("document.querySelector('.cara.frente').click()");
+  await evalua("window.__visor.saltarVuelo()");
+  caso("Tocar una cara del cubo lleva a esa vista", (await evalua("window.__visor.cubo()")).includes("rotateY(0deg)"));
+  // Volver al equipo, seleccionarlo y tocar un espacio vacío: la selección se mantiene
+  await evalua("window.__visor.accion('foco')");
+  await evalua("window.__visor.saltarVuelo()");
+  const toque = async (x, y) => {
+    // Toque real de Chrome (un PointerEvent armado a mano no tiene puntero activo y el control de órbita falla)
+    for (const type of ["mousePressed", "mouseReleased"]) await cdp("Input.dispatchMouseEvent", { type, x, y, button: "left", clickCount: 1 });
+    await espera(600);
+  };
+  const pf = await evalua("window.__visor.pantallaDe()");
+  await toque(pf.x, pf.y);
+  const sel1 = await evalua("window.__visor.seleccion()");
+  await toque(30, 160);
+  const sel2 = await evalua("window.__visor.seleccion()");
+  caso("Tocar un espacio vacío no suelta el equipo", sel1?.codigo === "LH-EQP-065" && sel2?.codigo === "LH-EQP-065", `${JSON.stringify(sel1)} → ${JSON.stringify(sel2)}`);
+  const nav = await evalua("document.querySelector('.hoja-nav span')?.textContent");
+  caso("La hoja muestra la posición entre los equipos con modelo 3D", /^\d de 4 equipos con modelo 3D$/.test(nav ?? ""), nav);
+  const sig = await evalua("document.querySelector('.hoja-nav .siguiente').getAttribute('href')");
+  await evalua("document.querySelector('.hoja-nav .siguiente').click()");
+  await hasta(`location.search.includes('${new URL(sig, BASE).searchParams.get("id")}') && window.__visor?.ms > 0`, 20000);
+  await evalua("window.__visor.saltarVuelo()");
+  const cod2 = await evalua("window.__visor.codigo");
+  caso("La flecha pasa al siguiente equipo y queda marcado", cod2 !== "LH-EQP-065" && (await evalua("window.__visor.objetivo")) === "bien", cod2);
+  await espera(2400);
+  await captura("10_siguiente_equipo.png");
+
+  // Escritorio
+  await cdp("Emulation.setDeviceMetricsOverride", { width: 1366, height: 768, deviceScaleFactor: 1, mobile: false });
+  await ir(`${BASE}?id=LH-EQP-065&ver=3d&prueba=1`, 300);
+  await hasta("window.__visor?.ms > 0", 30000);
+  // Primero termina el vuelo inicial al equipo; si no, llegaría después y taparía la vista elegida
+  await evalua("window.__visor.saltarVuelo()");
+  await espera(800);
+  await evalua("window.__visor.saltarVuelo()");
+  await evalua("window.__visor.vista('isometrico')");
+  await evalua("window.__visor.saltarVuelo()");
+  const dIsoEsc = await evalua("window.__visor.distancia()");
+  const ocEsc = await evalua("window.__visor.ocupacion()");
+  caso("El isométrico en escritorio queda cerca y llena la zona libre (antes, 68 m)", dIsoEsc < 40 && ocEsc >= 0.85 && ocEsc <= 1.15, `${dIsoEsc.toFixed(1)} m; ocupa ${Math.round(ocEsc * 100)} %`);
+  caso("En escritorio el cubo no queda bajo el panel del equipo", await evalua("(() => { const a = document.querySelector('.visor-cubo').getBoundingClientRect(); const b = document.querySelector('#visor-hoja').getBoundingClientRect(); return a.top >= b.bottom || a.bottom <= b.top || a.left >= b.right || a.right <= b.left; })()"));
+  await espera(500);
+  await captura("11_isometrico_escritorio.png");
+  await evalua("window.__visor.vista('frontal')");
+  await evalua("window.__visor.saltarVuelo()");
+  await espera(500);
+  await captura("12_frontal_escritorio.png");
+  await evalua("document.querySelector('[data-accion=vistas]').click()");
+  await espera(300);
+  caso("En escritorio el menú se abre dentro del visor", await evalua("(() => { const m = document.querySelector('.visor-vistas').getBoundingClientRect(); const v = document.querySelector('#visor').getBoundingClientRect(); return m.left >= v.left && m.right <= v.right && m.top >= v.top && m.bottom <= v.bottom; })()"));
+  await captura("13_menu_vistas_escritorio.png");
   caso("Sin errores en la consola", consola.length === 0, consola.slice(0, 5).join(" | "));
 } catch (e) {
   caso("La prueba terminó sin excepción", false, String(e?.message ?? e));

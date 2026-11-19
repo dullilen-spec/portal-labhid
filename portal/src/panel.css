@@ -310,3 +310,14 @@
   justify-content: center;
   margin: 16px 0;
 }
+
+/* v05b: alta de un bien nuevo */
+.p-o {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 12px 0 0;
+  font-size: 0.86rem;
+  color: var(--pizarra, #434c53);
+}

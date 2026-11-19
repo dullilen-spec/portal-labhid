@@ -1672,3 +1672,176 @@ main.entra-izq {
     transition: none;
   }
 }
+
+/* v05b: cubo de vistas dentro del anillo de la brújula (pedido del 15/11) */
+.visor-cubo {
+  position: absolute;
+  z-index: 3;
+  top: 74px;
+  right: 12px;
+  width: 80px;
+  height: 80px;
+}
+.visor-cubo[hidden],
+.visor.sin-3d .visor-cubo {
+  display: none;
+}
+.visor-cubo .visor-norte {
+  top: 0;
+  right: 0;
+  width: 100%;
+  height: 100%;
+}
+.visor-cubo .visor-norte circle {
+  fill: rgb(243 242 238 / 55%);
+  stroke: rgb(67 76 83 / 55%);
+  stroke-width: 1.2;
+}
+.visor-cubo .visor-norte b {
+  top: 9px;
+  font-size: 0.66rem;
+}
+.cubo-escena {
+  position: absolute;
+  inset: 20px;
+  perspective: 260px;
+}
+.cubo {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  transform-style: preserve-3d;
+  transform: rotateX(-30deg) rotateY(-45deg);
+}
+.cara {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--pizarra);
+  border-radius: 2px;
+  background: rgb(250 250 248 / 94%);
+  color: var(--grafito);
+  font: 600 0.5rem/1 var(--t-titulo);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  backface-visibility: hidden;
+  cursor: pointer;
+  transition: background 0.15s var(--curva), color 0.15s var(--curva);
+}
+button.cara:hover,
+button.cara:focus-visible {
+  background: var(--azul-claro);
+  color: var(--azul);
+  outline: none;
+}
+.cara.frente { transform: translateZ(20px); }
+.cara.der { transform: rotateY(90deg) translateZ(20px); }
+.cara.atras { transform: rotateY(180deg) translateZ(20px); }
+.cara.izq { transform: rotateY(-90deg) translateZ(20px); }
+.cara.arriba { transform: rotateX(90deg) translateZ(20px); background: rgb(230 238 251 / 94%); }
+.cara.abajo { transform: rotateX(-90deg) translateZ(20px); background: #d6d9d4; }
+
+/* Menú de vistas: sale junto al botón «Vistas» de la barra */
+.visor-vistas {
+  position: absolute;
+  z-index: 7;
+  display: grid;
+  gap: 2px;
+  width: 232px;
+  padding: 6px;
+  border-radius: 12px;
+  background: rgb(243 242 238 / 80%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  backdrop-filter: blur(18px) saturate(160%);
+  border: 1px solid rgb(255 255 255 / 60%);
+  box-shadow: 0 10px 28px rgb(32 37 43 / 22%), inset 0 1px 0 rgb(255 255 255 / 75%);
+  animation: entra-abajo 0.2s var(--curva);
+}
+.visor-vistas[hidden] {
+  display: none;
+}
+.visor-vistas button {
+  display: grid;
+  gap: 1px;
+  text-align: left;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--grafito);
+  cursor: pointer;
+}
+.visor-vistas button:hover,
+.visor-vistas button:focus-visible {
+  background: var(--azul-claro);
+  outline: none;
+}
+.visor-vistas strong {
+  font: 600 0.9rem/1.1 var(--t-titulo);
+  letter-spacing: 0.02em;
+}
+.visor-vistas small {
+  font-size: 0.72rem;
+  color: var(--pizarra);
+}
+body.vidrio-solido .visor-vistas {
+  background: var(--blanco);
+  backdrop-filter: none;
+}
+
+/* Flechas para pasar de un equipo a otro en la hoja */
+.hoja-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgb(67 76 83 / 18%);
+}
+.hoja-nav span {
+  flex: 1;
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--pizarra);
+}
+.hoja-nav .boton {
+  min-width: 44px;
+  min-height: 40px;
+  padding: 0;
+  justify-content: center;
+}
+.hoja-nav .boton svg {
+  width: 18px;
+  height: 18px;
+}
+.hoja-nav .siguiente svg {
+  transform: scaleX(-1);
+}
+@media (min-width: 900px) {
+  /* En escritorio el panel del equipo va arriba a la derecha: el cubo baja a la esquina inferior derecha */
+  .visor-cubo {
+    top: auto;
+    bottom: 18px;
+    right: 18px;
+    width: 92px;
+    height: 92px;
+  }
+  .cubo-escena {
+    inset: 23px;
+  }
+  .cubo {
+    width: 46px;
+    height: 46px;
+  }
+  .cara {
+    font-size: 0.56rem;
+  }
+  .cara.frente { transform: translateZ(23px); }
+  .cara.der { transform: rotateY(90deg) translateZ(23px); }
+  .cara.atras { transform: rotateY(180deg) translateZ(23px); }
+  .cara.izq { transform: rotateY(-90deg) translateZ(23px); }
+  .cara.arriba { transform: rotateX(90deg) translateZ(23px); }
+  .cara.abajo { transform: rotateX(-90deg) translateZ(23px); }
+}

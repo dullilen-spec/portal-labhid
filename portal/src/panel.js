@@ -4,7 +4,7 @@
 import "./panel.css";
 import { API, RAMA, REPO, RUTA_ACTUALIZACIONES, RUTA_CAMPO_FOTOS, RUTA_CAMPO_ITEMS, RUTA_CAMPO_MEDICIONES, RUTA_FOTOS } from "./config.js";
 import { aplicarCambios, fechaCorta } from "./datos.js";
-import { CAMPOS, TIPOS_EVENTO, fechaValida, validarArchivo, validarCambio } from "./esquema.js";
+import { CAMPOS, PREFIJOS, TIPOS_EVENTO, TIPOS_FICHA, fechaValida, siguienteCodigo, validarArchivo, validarCambio } from "./esquema.js";
 import { filtrar } from "./vistas.js";
 
 const esc = (v) =>
@@ -133,6 +133,8 @@ const campoHtml = (id, rotulo, control, ayuda = "") =>
 export function vistaPanel(raiz, estado) {
   const { bienes, cambios } = estado;
   const codigos = new Set(bienes.map((b) => b.Codigo_LH));
+  // Los del Excel; los dados de alta en el panel se validan desde su alta dentro del archivo de cambios
+  const codigosExcel = new Set(bienes.filter((b) => !b._alta).map((b) => b.Codigo_LH));
   // Cada contenedor con el texto de ubicación que ya usa el Excel maestro
   const lugares = new Map();
   for (const b of bienes) if (b.Contenedor && b.Contenedor !== "Pendiente" && !lugares.has(b.Contenedor)) lugares.set(b.Contenedor, b.Ubicacion_texto);
@@ -146,7 +148,7 @@ export function vistaPanel(raiz, estado) {
       <header class="panel-cabeza">
         <p class="sobretitulo">Mantenimiento del portal</p>
         <h1>Actualizar información</h1>
-        <p>Cambia el estado, la ubicación o la bitácora de un equipo. El cambio queda registrado con fecha, autor y motivo, y el sitio se publica solo en unos minutos.</p>
+        <p>Cambia el estado, la ubicación o la bitácora de un equipo, o agrega uno que acaba de llegar. El cambio queda registrado con fecha, autor y motivo, y el sitio se publica solo en unos minutos.</p>
       </header>
       <section class="panel-caja" id="p-sesion" aria-label="Sesión"></section>
       <div class="panel-pestanas" role="tablist" aria-label="Qué actualizar">
@@ -158,6 +160,7 @@ export function vistaPanel(raiz, estado) {
           <label class="p-rotulo" for="p-q">Equipo</label>
           <input id="p-q" type="search" autocomplete="off" placeholder="Nombre, modelo o código" />
           <ul id="p-resultados" class="p-resultados"></ul>
+          <p class="p-o">¿Llegó un equipo que no está en la lista? <button type="button" class="boton sec chico" id="p-nuevo">Agregar un bien nuevo</button></p>
         </div>
         <form id="p-form" class="panel-caja" hidden novalidate></form>
       </section>
@@ -253,6 +256,7 @@ export function vistaPanel(raiz, estado) {
 
   function elegir(b) {
     elegido = b;
+    form.dataset.modo = "editar";
     const fechaEsp = CAMPOS.Proxima_fecha.fecha.includes(b.Proxima_fecha) || !b.Proxima_fecha ? b.Proxima_fecha || "Pendiente" : "Fecha";
     const estadosUbic = [...new Set(["Por confirmar en campo", "Por registrar en campo", `Confirmada en campo el ${hoy()}`, b.Ubicacion_estado].filter(Boolean))];
     form.hidden = false;
@@ -317,9 +321,108 @@ export function vistaPanel(raiz, estado) {
     return nuevos;
   }
 
+  // ---------- alta de un bien nuevo (v05b, pedido del 15/11)
+  const opcionesLugar = () =>
+    `<option value="Pendiente">Pendiente</option>${[...lugares].map(([c, t]) => `<option value="${esc(c)}">${esc(t.split("(")[0].trim())}</option>`).join("")}`;
+  function abrirAlta() {
+    elegido = null;
+    form.dataset.modo = "alta";
+    form.hidden = false;
+    form.innerHTML = `
+      <header class="p-bien"><div><h2>Bien nuevo</h2><p class="t-codigo" id="a-codigo"></p></div></header>
+      <p class="nota">Registra lo que se ve en el equipo. Lo que no sepas déjalo en blanco: queda como «Pendiente». El código se asigna solo, con el número siguiente.</p>
+      <fieldset><legend>Identificación</legend>
+        ${campoHtml("a-pref", "Qué es", `<select id="a-pref">${Object.entries(PREFIJOS).map(([k, t]) => `<option value="${k}">${esc(t)} (${k})</option>`).join("")}</select>`)}
+        ${campoHtml("a-nombre", "Nombre", `<input id="a-nombre" type="text" maxlength="120" required placeholder="Por ejemplo: Medidor de caudal de área variable" />`)}
+        ${campoHtml("a-ficha", "Ficha que le corresponde", `<select id="a-ficha">${Object.entries(TIPOS_FICHA).map(([k, t]) => `<option value="${esc(k)}">${esc(t)}${k.startsWith("FOR") ? ` (${k})` : ""}</option>`).join("")}</select>`)}
+        <div class="p-doble">
+          ${campoHtml("a-marca", "Marca y modelo", `<input id="a-marca" type="text" maxlength="120" />`)}
+          ${campoHtml("a-fab", "Fabricante", `<input id="a-fab" type="text" maxlength="80" />`)}
+        </div>
+        ${campoHtml("a-serie", "Número de serie", `<input id="a-serie" type="text" maxlength="60" />`, "El de la placa del fabricante. No escribas el código patrimonial.")}
+        ${campoHtml("a-desc", "Para qué sirve", `<textarea id="a-desc" rows="3" maxlength="600"></textarea>`)}
+      </fieldset>
+      <fieldset><legend>Ubicación y estado</legend>
+        ${campoHtml("a-cont", "Mueble o zona", `<select id="a-cont">${opcionesLugar()}</select>`, "Si el mueble no está en la lista, elige Pendiente y avisa a los tesistas para crearlo en el Excel y en el modelo.")}
+        <div class="p-doble">
+          ${campoHtml("a-eo", "Estado operativo", `<select id="a-eo">${opciones(CAMPOS.Estado_operativo.lista, "Pendiente")}</select>`)}
+          ${campoHtml("a-ec", "Estado de conservación", `<select id="a-ec">${opciones(CAMPOS.Estado_conservacion.lista, "Pendiente")}</select>`)}
+        </div>
+      </fieldset>
+      <fieldset><legend>Fotografía (opcional)</legend>
+        ${campoHtml("a-foto", "Foto del equipo", `<input id="a-foto" type="file" accept="image/*" capture="environment" />`, "Se reduce antes de subirla.")}
+      </fieldset>
+      ${campoHtml("f-motivo", "Motivo del alta", `<input id="f-motivo" type="text" maxlength="200" required />`, "Por ejemplo: llegó por donación, compra 2026, se encontró en el almacén.")}
+      <div class="p-acciones"><button class="boton" type="submit" data-necesita-sesion>Agregar el bien</button></div>`;
+    const pref = form.querySelector("#a-pref");
+    const verCodigo = () => (form.querySelector("#a-codigo").textContent = `Código que se asignará: ${siguienteCodigo(pref.value, codigos)}`);
+    pref.addEventListener("change", verCodigo);
+    verCodigo();
+    actualizarBotones();
+    decir("");
+    form.scrollIntoView({ block: "start", behavior: "smooth" });
+  }
+  $("#p-nuevo").addEventListener("click", abrirAlta);
+
+  async function guardarAlta() {
+    const v = (id) => form.querySelector(id).value.trim();
+    const motivo = v("#f-motivo");
+    const archivo = form.querySelector("#a-foto").files[0];
+    const codigo = siguienteCodigo(v("#a-pref"), codigos);
+    const cont = v("#a-cont");
+    const valor = Object.fromEntries(
+      Object.entries({
+        Nombre: v("#a-nombre"),
+        Tipo_ficha: v("#a-ficha"),
+        Marca_modelo: v("#a-marca"),
+        Fabricante: v("#a-fab"),
+        Serie: v("#a-serie"),
+        Descripcion_uso: v("#a-desc"),
+        Contenedor: cont,
+        Ubicacion_texto: cont === "Pendiente" ? "" : lugares.get(cont),
+        Estado_operativo: v("#a-eo"),
+        Estado_conservacion: v("#a-ec"),
+      }).filter(([, x]) => x !== ""),
+    );
+    const fecha = new Date().toISOString();
+    const nuevos = [{ id: idCambio(0), codigo, campo: "Alta", antes: "", valor, fecha, autor: sesion.autor, motivo }];
+    if (archivo) nuevos.push({ id: idCambio(1), codigo, campo: "Foto", antes: "", valor: `fotos/${codigo}.${sello()}.webp`, fecha, autor: sesion.autor, motivo });
+    // La foto se valida contra el bien ya dado de alta
+    const errores = [...validarCambio(nuevos[0], codigos, contenedores), ...(nuevos[1] ? validarCambio(nuevos[1], new Set([...codigos, codigo]), contenedores) : [])];
+    if (errores.length) return decir(`Revisa esto antes de guardar:<ul>${[...new Set(errores)].map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`, "mal");
+    const boton = form.querySelector('[type="submit"]');
+    boton.disabled = true;
+    decir("Guardando...");
+    try {
+      if (nuevos[1]) await escribir(`${RUTA_FOTOS}/${nuevos[1].valor.split("/")[1]}`, await fotoWebp(archivo), `Foto de ${codigo} (${sesion.autor})`, null, sesion.token);
+      await agregarAlArchivo(RUTA_ACTUALIZACIONES, sesion.token, `Alta de ${codigo}: ${valor.Nombre} (${sesion.autor})`, (json) => {
+        const datos = json ?? { version: 1, cambios: [] };
+        const numero = codigo.split("-")[2];
+        if (datos.cambios.some((x) => x.campo === "Alta" && x.codigo.split("-")[2] === numero)) {
+          throw new Error(`Otra persona acaba de agregar un bien con el número ${numero}. Vuelve a abrir el panel y repite el alta.`);
+        }
+        datos.cambios.push(...nuevos);
+        const mal = validarArchivo(datos, codigosExcel, contenedores);
+        if (mal.length) throw new Error(`El archivo de actualizaciones quedó con errores: ${mal[0]}`);
+        return datos;
+      });
+      cambios.push(...nuevos);
+      aplicarCambios(bienes, nuevos);
+      codigos.add(codigo);
+      elegir(bienes.find((x) => x.Codigo_LH === codigo));
+      const url = new URL(`./?id=${codigo}`, location.href).href;
+      decir(`Agregado: <strong>${esc(codigo)}</strong>, ${esc(valor.Nombre)}. El sitio se publica solo en unos minutos. Su ficha queda en <a href="${esc(url)}">${esc(url)}</a>; con ese enlace se imprime su QR.`, "ok");
+    } catch (err) {
+      decir(`No se guardó. ${esc(err.message)}`, "mal");
+      boton.disabled = !sesion;
+    }
+  }
+
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
-    if (!sesion || !elegido) return decir("Entra con tu token para guardar.", "mal");
+    if (!sesion) return decir("Entra con tu token para guardar.", "mal");
+    if (form.dataset.modo === "alta") return guardarAlta();
+    if (!elegido) return decir("Elige un equipo.", "mal");
     const b = elegido;
     const boton = form.querySelector('[type="submit"]');
     const motivo = form.querySelector("#f-motivo").value.trim();

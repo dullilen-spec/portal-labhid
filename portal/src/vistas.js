@@ -493,14 +493,46 @@ export function vistaAcerca(raiz, modelo = null) {
   document.title = "Acerca | Equipos LABHID";
 }
 
-const NOMBRE_ACCION = { foco: "Ubicación", general: "General", planta: "Planta", muros: "Sin muros", corte: "Corte", aislar: "Aislar", pantalla: "Ampliar" };
-const ICONO_ACCION = { foco: ICONO.foco, general: ICONO.general, planta: ICONO.planta, muros: ICONO.muros, corte: ICONO.corte, aislar: ICONO.aislar, pantalla: ICONO.ampliar };
+const NOMBRE_ACCION = { foco: "Ubicación", vistas: "Vistas", general: "General", planta: "Planta", muros: "Sin muros", corte: "Corte", aislar: "Aislar", pantalla: "Ampliar" };
+const ICONO_ACCION = { foco: ICONO.foco, vistas: ICONO.cubo, general: ICONO.general, planta: ICONO.planta, muros: ICONO.muros, corte: ICONO.corte, aislar: ICONO.aislar, pantalla: ICONO.ampliar };
+
+// v05b: vistas del edificio (pedido del 15/11). Los nombres son los del cubo de Revit
+const VISTAS = [
+  ["general", "General", "La vista inicial, desde el interior"],
+  ["isometrico", "Isométrico", "Desde la esquina frontal derecha"],
+  ["frontal", "Frontal", "Desde el muro cortina"],
+  ["posterior", "Posterior", "Desde atrás"],
+  ["izquierda", "Izquierda", "Lateral izquierdo, mirando el frente"],
+  ["derecha", "Derecha", "Lateral derecho, mirando el frente"],
+  ["planta", "Planta", "Desde arriba, con el frente abajo"],
+];
+const CARAS_CUBO = [
+  ["frente", "frontal", "Frente"],
+  ["atras", "posterior", "Atrás"],
+  ["izq", "izquierda", "Izq."],
+  ["der", "derecha", "Der."],
+  ["arriba", "planta", "Planta"],
+  ["abajo", "", ""],
+];
 
 const nombreLugar = (b) => lugarCorto(b).split(" - ").pop();
 
-function hojaBien(b, cerrable) {
+// v05b: flechas para pasar al equipo anterior o siguiente con modelo 3D sin salir del visor
+function navEquipos(b, orden) {
+  const i = orden ? orden.findIndex((x) => x.Codigo_LH === b.Codigo_LH) : -1;
+  if (i < 0 || orden.length < 2) return "";
+  const ant = orden[(i - 1 + orden.length) % orden.length];
+  const sig = orden[(i + 1) % orden.length];
+  return `<div class="hoja-nav">
+      <a class="boton chico sec" data-interno data-seguir href="${enlace(ant.Codigo_LH, "&ver=3d")}" aria-label="Equipo anterior: ${esc(ant.Nombre)}" title="${esc(ant.Nombre)}">${ICONO.atras}</a>
+      <span>${i + 1} de ${orden.length} equipos con modelo 3D</span>
+      <a class="boton chico sec siguiente" data-interno data-seguir href="${enlace(sig.Codigo_LH, "&ver=3d")}" aria-label="Equipo siguiente: ${esc(sig.Nombre)}" title="${esc(sig.Nombre)}">${ICONO.atras}</a>
+    </div>`;
+}
+
+function hojaBien(b, cerrable, orden = null) {
   const verMueble = b.Contenedor && b.Contenedor !== "Pendiente" && !b.Contenedor.startsWith("SALA");
-  return `<div class="hoja-fila">
+  return `${navEquipos(b, orden)}<div class="hoja-fila">
       ${miniatura(b)}
       <div class="hoja-texto"><strong>${esc(b.Nombre)}</strong><small>${esc(b.Codigo_LH)}</small></div>
       ${cerrable ? `<button type="button" class="hoja-cerrar" data-hoja="cerrar" aria-label="Cerrar">${ICONO.cerrar}</button>` : chipEstado(b.Estado_operativo)}
@@ -545,7 +577,7 @@ function hojaMueble(cod, bienes) {
 export async function vistaVisor(raiz, b, bienes, { estaCerrado }) {
   const porCodigo = new Map(bienes.map((x) => [x.Codigo_LH, x]));
   const ancho = innerWidth >= 700;
-  const acciones = (b ? ["foco", "general", "planta", "muros", "corte", "aislar", "pantalla"] : ["general", "planta", "muros", "corte", "aislar", "pantalla"])
+  const acciones = (b ? ["foco", "vistas", "muros", "corte", "aislar", "pantalla"] : ["vistas", "muros", "corte", "aislar", "pantalla"])
     .filter((a) => a !== "pantalla" || (document.fullscreenEnabled && ancho));
   raiz.innerHTML = `
     <section class="visor-pagina">
@@ -565,9 +597,17 @@ export async function vistaVisor(raiz, b, bienes, { estaCerrado }) {
       <div id="visor" class="visor">
         <div class="visor-carga" id="visor-carga" role="status">${tubos("carga")}<div class="barra"><i id="visor-barra"></i></div><span id="visor-texto">Cargando el modelo...</span></div>
         <div class="visor-pin" hidden><span>${b ? esc(b.Nombre) : ""}</span></div>
-        <div class="visor-norte" role="img" aria-label="Norte real" title="Norte real" hidden><svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="18"/><path class="flecha" d="M20 6 L26 22 L20 19 L14 22 Z"/><path class="cola" d="M20 34 L26 22 L20 25 L14 22 Z"/></svg><b>N</b></div>
+        <div class="visor-cubo" hidden>
+          <div class="visor-norte" role="img" aria-label="Norte real" title="Norte real" hidden><svg viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="37"/><path class="flecha" d="M40 0 L46 10 L34 10 Z"/></svg><b>N</b></div>
+          <div class="cubo-escena" role="group" aria-label="Cubo de vistas"><div class="cubo">
+            ${CARAS_CUBO.map(([c, v, t]) => (v ? `<button type="button" class="cara ${c}" data-vista="${v}" title="Vista ${esc(VISTAS.find((x) => x[0] === v)[1].toLowerCase())}">${t}</button>` : `<span class="cara ${c}" aria-hidden="true"></span>`)).join("")}
+          </div></div>
+        </div>
+        <div class="visor-vistas" role="menu" aria-label="Vistas del edificio" hidden>
+          ${VISTAS.map(([v, t, d]) => `<button type="button" role="menuitem" data-vista="${v}"><strong>${t}</strong><small>${d}</small></button>`).join("")}
+        </div>
         <div class="visor-barra" role="toolbar" aria-label="Controles del modelo">
-          ${acciones.map((a) => `<button type="button" data-accion="${a}" title="${a === "foco" ? "Volver a la ubicación" : NOMBRE_ACCION[a]}" ${a === "muros" || a === "aislar" || a === "corte" ? 'aria-pressed="false"' : ""}>${ICONO_ACCION[a]}<span>${NOMBRE_ACCION[a]}</span></button>`).join("")}
+          ${acciones.map((a) => `<button type="button" data-accion="${a}" title="${a === "foco" ? "Volver a la ubicación" : a === "vistas" ? "Frontal, posterior, laterales, isométrico y planta" : NOMBRE_ACCION[a]}" ${a === "muros" || a === "aislar" || a === "corte" ? 'aria-pressed="false"' : ""}${a === "vistas" ? ' aria-haspopup="menu" aria-expanded="false"' : ""}>${ICONO_ACCION[a]}<span>${NOMBRE_ACCION[a]}</span></button>`).join("")}
         </div>
       </div>
       ${panelZonas(bienes)}
@@ -582,15 +622,21 @@ export async function vistaVisor(raiz, b, bienes, { estaCerrado }) {
   const caja = raiz.querySelector("#visor");
   document.title = `${b ? b.Nombre : "Mapa 3D"} | Equipos LABHID`;
 
+  // Equipos con modelo 3D propio, en el orden de las flechas de la hoja (por lugar y nombre)
+  let orden = null;
+  let control = null;
   const hojaBase = () => {
-    hoja.innerHTML = b ? hojaBien(b, false) : "";
+    hoja.innerHTML = b ? hojaBien(b, false, orden) : "";
     hoja.hidden = !b;
   };
   hojaBase();
   hoja.addEventListener("click", (e) => {
     const t = e.target.closest("[data-hoja]");
     if (!t) return;
-    if (t.dataset.hoja === "cerrar") hojaBase();
+    if (t.dataset.hoja === "cerrar") {
+      control?.quitarSeleccion?.();
+      hojaBase();
+    }
     if (t.dataset.hoja === "mueble") {
       hoja.innerHTML = hojaMueble(t.dataset.mueble, bienes);
       hoja.hidden = false;
@@ -653,14 +699,19 @@ export async function vistaVisor(raiz, b, bienes, { estaCerrado }) {
 
   try {
     const { abrirVisor } = await import("./visor.js");
-    return await abrirVisor(caja, b, porCodigo, {
+    control = await abrirVisor(caja, b, porCodigo, {
       cerrado: estaCerrado,
       alProgreso: (p) => {
         barra.style.width = `${Math.round(p * 100)}%`;
         texto.textContent = p >= 1 ? "Preparando la vista..." : `Descargando el modelo: ${Math.round(p * 100)} %`;
       },
-      alListo: ({ tipo, codigo, simulado, geometriaReal }) => {
+      alListo: ({ tipo, codigo, simulado, geometriaReal, conModelo }) => {
         carga.hidden = true;
+        orden = (conModelo ?? [])
+          .map((c) => porCodigo.get(c))
+          .filter(Boolean)
+          .sort((x, y) => lugarCorto(x).localeCompare(lugarCorto(y), "es") || x.Nombre.localeCompare(y.Nombre, "es"));
+        hojaBase();
         caja.classList.add("listo");
         const etiqueta = raiz.querySelector(".visor-pin span");
         if (tipo === "padre") etiqueta.textContent = `Con: ${porCodigo.get(codigo)?.Nombre ?? codigo}`;
@@ -685,7 +736,7 @@ export async function vistaVisor(raiz, b, bienes, { estaCerrado }) {
         if (sel.tipo === "bien") {
           const x = porCodigo.get(sel.codigo);
           if (x && x.Codigo_LH === b?.Codigo_LH) return hojaBase();
-          hoja.innerHTML = x ? hojaBien(x, true) : "";
+          hoja.innerHTML = x ? hojaBien(x, true, orden) : "";
         } else {
           hoja.innerHTML = hojaMueble(sel.codigo, bienes);
         }
@@ -696,6 +747,7 @@ export async function vistaVisor(raiz, b, bienes, { estaCerrado }) {
         carga.innerHTML = `<strong>El 3D se interrumpió</strong><span>El teléfono liberó memoria gráfica. La ubicación en texto sigue siendo válida.</span><a class="boton chico" href="${esc(location.href)}">Volver a cargar</a>`;
       },
     });
+    return control;
   } catch (err) {
     console.warn("3D no disponible:", err?.message ?? err);
     caja.classList.add("sin-3d");
@@ -723,9 +775,10 @@ const NOMBRE_CAMPO = {
   Ubicacion_estado: "Estado de la ubicación",
   Foto: "Fotografía",
   Historial: "Bitácora",
+  Alta: "Bien nuevo",
 };
 const valorCambio = (x) =>
-  x.campo === "Historial" ? `${esc(x.valor.tipo)}: ${esc(x.valor.resultado)}` : x.campo === "Foto" ? "Foto nueva" : x.campo === "Ubicacion_texto" ? esc(String(x.valor).split("(")[0].trim()) : esc(x.valor);
+  x.campo === "Alta" ? `${esc(x.valor.Nombre)}, agregado al inventario` : x.campo === "Historial" ? `${esc(x.valor.tipo)}: ${esc(x.valor.resultado)}` : x.campo === "Foto" ? "Foto nueva" : x.campo === "Ubicacion_texto" ? esc(String(x.valor).split("(")[0].trim()) : esc(x.valor);
 
 export function vistaNovedades(raiz, bienes, cambios) {
   const porCodigo = new Map(bienes.map((b) => [b.Codigo_LH, b]));

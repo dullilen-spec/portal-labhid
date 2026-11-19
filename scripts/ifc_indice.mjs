@@ -114,7 +114,12 @@ if (rumboX !== null) {
 const corte = { altura_m: Number(opcion("corte") ?? 1.8), piso_base: pisoBase };
 // v05: el visor encuadra con el edificio (muros, muro cortina y columnas), no con las veredas ni el volado
 const encuadre = conGeometria([T.IFCWALL, T.IFCWALLSTANDARDCASE, T.IFCCURTAINWALL, T.IFCCOLUMN]);
-const res = { simulado, bienes, contenedores, ocultar, entorno, piso, otros, encuadre, geometria_real: Object.keys(bienes), norte, corte };
+// v05b: las columnas dan los ejes propios del edificio (en el visor está girado) y el muro cortina marca el frente,
+// para las vistas frontal, posterior y laterales y para el cubo de vistas
+const columnas = conGeometria([T.IFCCOLUMN]);
+// El muro cortina no trae geometría propia: la llevan sus paneles (IfcPlate)
+const fachada = [...conGeometria([T.IFCCURTAINWALL]), ...conGeometria([T.IFCPLATE])];
+const res = { simulado, bienes, contenedores, ocultar, entorno, piso, otros, encuadre, columnas, fachada, geometria_real: Object.keys(bienes), norte, corte };
 fs.writeFileSync(salida, JSON.stringify(res));
 console.log(`Índice: ${Object.keys(bienes).length} bienes, ${Object.keys(contenedores).length} contenedores, ${entorno.length} de entorno, ${piso.length} pisos, ${ocultar.length} ocultos, ${otros.length} otros`);
 if (norte) console.log("Norte:", JSON.stringify(norte));

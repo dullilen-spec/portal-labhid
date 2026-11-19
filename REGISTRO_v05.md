@@ -59,3 +59,32 @@ Resultados en `integridad\resultado_navegador.txt` (batería anterior) y `integr
 2. **Campos editables:** son solo los que cambian en el día a día. Nombre, modelo, serie, especificaciones y manuales siguen saliendo solo del Excel.
 3. **Bitácora:** el autor (iniciales) queda en `actualizaciones.json`, que es público. El Excel no recibe autores, como hasta ahora.
 4. **Estados de conservación:** la lista es Bueno, Regular, Malo y Pendiente. El Excel no tenía una lista cerrada para ese campo; hay que confirmarla.
+
+## 6. v05b: pedidos del 15/11 que no entraron en la v05 (15/11/2026)
+
+Diego señaló que faltaban los cambios del visor y otros que había pedido. Se revisaron completas las conversaciones del 11–12/11 (rediseño v03) y del 15/11 (correcciones de la v03 y de R. Castillo). Estado de cada pedido:
+
+| # | Pedido | Estado | Dónde |
+|---|---|---|---|
+| 1 | Botón de vistas: frontal, posterior, laterales | Hecho: menú «Vistas» con 7 vistas | `visor.js` (`dirVista`, `acciones.vista`), `vistas.js` (`VISTAS`) |
+| 2 | Cubo de vistas tipo ViewCube | Hecho: dentro del anillo de la brújula; abajo a la derecha en escritorio | `vistas.js` (`CARAS_CUBO`), `tema.css` |
+| 3 | El isométrico se ve muy lejos | Hecho: ejes del edificio desde las 17 columnas (el local está girado 41° en el visor) y encuadre en la zona que no tapan los paneles. Escritorio: de 68 m a 30 m, el edificio ocupa el 87 % | `visor.js` (`edificio`, `zonaLibre`, `ajustar`), `scripts/ifc_indice.mjs` (`columnas`, `fachada`) |
+| 4 | Cambiar entre instrumentos sin que se deseleccione | Hecho: flechas anterior y siguiente en la hoja; la cámara sigue desde donde estaba; tocar un espacio vacío no suelta la selección (se cierra con X o Esc) | `vistas.js` (`navEquipos`), `visor.js` (`camaraPrevia`) |
+| 5 | Agregar un equipo nuevo sin Revit | Hecho: alta en el panel con código automático, validación igual en la publicación y paso al Excel con `sincronizar_excel.py` | `panel.js`, `esquema.js`, `datos.js` (`nuevoBien`), `sincronizar_excel.py` |
+| 6 | Flujo firme para subir Excel e IFC | Hecho: `datos/` y `modelo_fuente/` en el repositorio; la publicación convierte, revisa y bloquea si algo no cuadra | `publicar.yml`, `scripts/excel_a_json.py` (copia del de la v03) |
+| 7 | Dominio | Documentado, con recomendación | `DOMINIO_Y_ACCESO.md` |
+| 8 | Login y niveles de acceso | Opciones y recomendación; **falta la decisión de Diego** | `DOMINIO_Y_ACCESO.md` |
+| 9 | Metas de rendimiento | Medido: modelo de 0,34 MB; ficha por QR en 1,45 s con 4G (sitio publicado). Con la 4G lenta de Lighthouse, 3,41 s: los dos archivos de datos ahora se piden a la vez | `scripts/medir_rendimiento.mjs`, `integridad/rendimiento*.txt` |
+
+**Otros cambios y hallazgos:**
+- La planta se ve alineada al edificio con el frente abajo, como en los planos de Revit. La brújula sigue marcando el norte real. Antes salía con el norte arriba y el edificio girado.
+- Si la persona mueve la cámara o elige una vista apenas abre el visor, el vuelo inicial al equipo ya no le quita el control.
+- **El Excel maestro vigente** es el de `11. PORTAL\Portal-VDC_v03_PRUEBA\datos` (162 bienes). El de `C:\Users\diego\Portal-VDC\datos` y el de la v01 tienen 81.
+  - Su conversión reproduce `bienes.json` salvo los enlaces a manuales, que quedan vacíos porque los PDF no viajan con el sitio (el sitio ya los ocultaba).
+- El IFC no lleva códigos patrimoniales. El único número de 12 cifras que aparece es una coordenada de la geometría.
+
+**Pruebas v05b:**
+- `prueba_v05.mjs`: 57 casos, 57 OK. Se agregaron 21: vistas, cubo, encuadre, cambio de equipo, toque en vacío y alta de un bien.
+- Alta probada de punta a punta sobre una copia del Excel: validación con 9 casos, sitio, `sincronizar_excel.py --aplicar` y `excel_a_json.py`.
+
+**Todavía no probado:** el Mapa 3D en un celular real. En Chrome sin ventana el 3D se dibuja por software y tarda 8,8 s con 4G, así que esa medida no sirve para un teléfono.

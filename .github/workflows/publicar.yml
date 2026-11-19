@@ -33,6 +33,42 @@ jobs:
       - name: Instalar dependencias
         run: npm ci
         working-directory: portal
+      # v05b: si se subió el Excel maestro a datos/, los datos salen de él (con sus revisiones de privacidad)
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Datos desde el Excel maestro (si se subió)
+        run: |
+          if [ -f datos/Maestro_Bienes_LABHID.xlsx ]; then
+            pip install --quiet openpyxl==3.1.5
+            python scripts/excel_a_json.py datos/Maestro_Bienes_LABHID.xlsx portal/public/datos/bienes.json
+          else
+            echo "Sin Excel en datos/: se publica portal/public/datos/bienes.json tal como está."
+          fi
+      # v05b: si se subió un IFC a modelo_fuente/, el Mapa 3D sale de él
+      - name: Modelo 3D desde el IFC (si se subió)
+        env:
+          RUMBO_X: "131.1079"
+        run: |
+          n=$(ls modelo_fuente/*.ifc 2>/dev/null | wc -l)
+          if [ "$n" -gt 1 ]; then echo "Hay $n archivos IFC en modelo_fuente/: deja solo uno."; exit 1; fi
+          if [ "$n" -eq 1 ]; then
+            IFC=$(ls modelo_fuente/*.ifc)
+            node scripts/ifc_indice.mjs "$IFC" portal/public/modelo/indice_modelo.json --rumbo-x=$RUMBO_X
+            node scripts/ifc_a_frag.mjs "$IFC" portal/public/modelo/modelo.frag
+          else
+            echo "Sin IFC en modelo_fuente/: se publica el modelo de portal/public/modelo tal como está."
+          fi
+      - name: Revisar que el modelo y los datos coincidan
+        run: |
+          node -e '
+            const fs = require("fs");
+            const datos = new Set(JSON.parse(fs.readFileSync("portal/public/datos/bienes.json")).bienes.map((b) => b.Codigo_LH));
+            const ind = JSON.parse(fs.readFileSync("portal/public/modelo/indice_modelo.json"));
+            const faltan = Object.keys(ind.bienes).filter((c) => !datos.has(c));
+            if (faltan.length) { console.error("El modelo tiene códigos que no están en los datos:", faltan.join(", ")); process.exit(1); }
+            console.log("Modelo y datos coinciden:", Object.keys(ind.bienes).length, "bienes en el 3D");
+          '
       - name: Revisar las actualizaciones del panel
         run: node scripts/validar_actualizaciones.mjs
       - name: Construir el sitio

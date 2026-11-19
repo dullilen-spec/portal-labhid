@@ -17,6 +17,12 @@ portal/public/manuales/
 *.las
 *.rcp
 control_interno*
+Control_Interno*
+
+# v05b: el Excel maestro y el IFC del portal sí pueden subirse (no llevan datos patrimoniales;
+# excel_a_json.py y publicar.yml lo comprueban antes de publicar). Solo estos dos lugares
+!datos/Maestro_Bienes_LABHID.xlsx
+!modelo_fuente/*.ifc
 
 # Sistema
 desktop.ini
